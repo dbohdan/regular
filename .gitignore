@@ -1,0 +1,10 @@
+*.pyc
+__pycache__
+
+/.*_cache
+/.nox
+/.python-version
+/.tox
+/attic
+/build
+/dist
