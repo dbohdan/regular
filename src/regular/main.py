@@ -160,6 +160,9 @@ def run_job(job_dir: Path, *, config: Config, name: str = "") -> JobResult:
     if not name:
         name = job_dir.name
 
+    lock_path = config.state_dir / name / FileDirNames.RUNNING_LOCK
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+
     try:
         with portalocker.Lock(
             config.state_dir / name / FileDirNames.RUNNING_LOCK,
