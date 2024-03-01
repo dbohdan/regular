@@ -4,24 +4,33 @@ import re
 import subprocess as sp
 import time
 from dataclasses import dataclass
-from datetime import timedelta, datetime, timezone
+from datetime import timedelta
 from functools import reduce
 from os import environ
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from dotenv import dotenv_values
 from platformdirs import PlatformDirs
 
-ENV_FILE = "env"
-FILENAME_DEFAULT = "script"
-FILENAME_FILE = "filename"
-JOBS_DIR_DEFAULT = "jobs"
-JOBS_DIR_ENV_VAR = "REGULAR_JOBS_DIR"
-LAST_RUN_FILE = "last"
-SCHEDULE_DEFAULT = ""
-SCHEDULE_FILE = "schedule"
-STATE_DIR_ENV_VAR = "REGULAR_STATE_DIR"
+
+class Defaults:
+    FILENAME = "script"
+    SCHEDULE = ""
+
+
+class EnvVars:
+    CONFIG_DIR = "REGULAR_CONFIG_DIR"
+    STATE_DIR = "REGULAR_STATE_DIR"
+
+
+class FileDirNames:
+    ENV = "env"
+    FILENAME = "filename"
+    JOBS = "jobs"
+    LAST_RUN = "last"
+    SCHEDULE = "schedule"
+
 
 SCHEDULE_RE = " *".join(
     ["", *(rf"(?:(\d+) *({unit}))?" for unit in ("w", "d", "h", "m", "s")), ""]
@@ -33,8 +42,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class Config:
-    env_file: Path
-    jobs_dir: Path
+    config_dir: Path
     state_dir: Path
 
 
@@ -71,12 +79,14 @@ def parse_schedule(schedule: str) -> timedelta:
 
 
 def run_job(job_dir: Path, *, config: Config) -> None:
-    env = load_env(config.env_file, job_dir / ENV_FILE)
+    env = load_env(config.config_dir / FileDirNames.ENV, job_dir / FileDirNames.ENV)
 
-    filename = read_text_or_default(job_dir / FILENAME_FILE, FILENAME_DEFAULT)
-    schedule = read_text_or_default(job_dir / SCHEDULE_FILE, SCHEDULE_DEFAULT)
+    filename = read_text_or_default(job_dir / FileDirNames.FILENAME, Defaults.FILENAME)
+    schedule = read_text_or_default(job_dir / FileDirNames.SCHEDULE, Defaults.SCHEDULE)
 
-    last_run_file = config.state_dir / config.jobs_dir.name / job_dir.name / LAST_RUN_FILE
+    last_run_file = (
+        config.state_dir / FileDirNames.JOBS / job_dir.name / FileDirNames.LAST_RUN
+    )
     last_run = last_run_file.stat().st_mtime if last_run_file.exists() else None
 
     min_delay = parse_schedule(schedule).total_seconds()
@@ -92,16 +102,11 @@ def main() -> None:
     dirs = PlatformDirs("regular", "dbohdan")
 
     config = Config(
-        env_file=Path(dirs.user_config_path) / ENV_FILE,
-        jobs_dir=Path(
-            environ.get(
-                JOBS_DIR_ENV_VAR, Path(dirs.user_config_path) / JOBS_DIR_DEFAULT
-            )
-        ),
-        state_dir=Path(environ.get(STATE_DIR_ENV_VAR, dirs.user_state_path)),
+        config_dir=Path(environ.get(EnvVars.CONFIG_DIR, dirs.user_config_path)),
+        state_dir=Path(environ.get(EnvVars.STATE_DIR, dirs.user_state_path)),
     )
 
-    for item in config.jobs_dir.iterdir():
+    for item in (config.config_dir / FileDirNames.JOBS).iterdir():
         if not item.is_dir():
             continue
 
