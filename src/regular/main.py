@@ -48,6 +48,7 @@ APP_AUTHOR = "dbohdan"
 SCHEDULE_RE = " *".join(
     ["", *(rf"(?:(\d+) *({unit}))?" for unit in ("w", "d", "h", "m", "s")), ""]
 )
+SMTP_SERVER = "127.0.0.1"
 
 if TYPE_CHECKING:
     Env = dict[str, str]
@@ -126,7 +127,7 @@ def notify_user_by_email(
         )
     )
 
-    smtp = smtplib.SMTP("localhost")
+    smtp = smtplib.SMTP(SMTP_SERVER)
     smtp.send_message(msg)
     smtp.quit()
 
@@ -155,7 +156,8 @@ def run_job(job_dir: Path, *, config: Config) -> None:
     )
 
     if (job_dir / FileDirNames.NEVER_NOTIFY).exists() or (
-        completed.returncode == 0 and not (job_dir / FileDirNames.ALWAYS_NOTIFY).exists()
+        completed.returncode == 0
+        and not (job_dir / FileDirNames.ALWAYS_NOTIFY).exists()
     ):
         return
 
