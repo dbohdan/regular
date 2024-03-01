@@ -154,14 +154,18 @@ def run_job(job_dir: Path, *, config: Config) -> None:
         [job_dir / filename], capture_output=True, check=False, env=env, text=True
     )
 
-    if not (job_dir / FileDirNames.NEVER_NOTIFY).exists() and (completed.returncode != 0 or (job_dir / FileDirNames.ALWAYS_NOTIFY).exists()):
-        notify_user(
-            job_dir,
-            config=config,
-            returncode=completed.returncode,
-            stdout=completed.stdout,
-            stderr=completed.stderr,
-        )
+    if (job_dir / FileDirNames.NEVER_NOTIFY).exists() or (
+        completed.returncode == 0 and not (job_dir / FileDirNames.ALWAYS_NOTIFY).exists()
+    ):
+        return
+
+    notify_user(
+        job_dir,
+        config=config,
+        returncode=completed.returncode,
+        stdout=completed.stdout,
+        stderr=completed.stderr,
+    )
 
 
 def main() -> None:
