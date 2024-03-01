@@ -32,6 +32,8 @@ class FileDirNames:
     SCHEDULE = "schedule"
 
 
+APP_NAME = "regular"
+APP_AUTHOR = "dbohdan"
 SCHEDULE_RE = " *".join(
     ["", *(rf"(?:(\d+) *({unit}))?" for unit in ("w", "d", "h", "m", "s")), ""]
 )
@@ -99,7 +101,7 @@ def run_job(job_dir: Path, *, config: Config) -> None:
 
 
 def main() -> None:
-    dirs = PlatformDirs("regular", "dbohdan")
+    dirs = PlatformDirs(APP_NAME, APP_AUTHOR)
 
     config = Config(
         config_dir=Path(environ.get(EnvVars.CONFIG_DIR, dirs.user_config_path)),
