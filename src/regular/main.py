@@ -11,7 +11,7 @@ from email.message import EmailMessage
 from functools import reduce
 from os import environ
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, Union
 
 import portalocker
 from dotenv import dotenv_values
@@ -52,13 +52,6 @@ SCHEDULE_RE = " *".join(
 )
 SMTP_SERVER = "127.0.0.1"
 
-if TYPE_CHECKING:
-    Env = dict[str, str]
-
-    class Notifier(Protocol):
-        def __call__(self, result: JobResult) -> None:
-            ...
-
 
 @dataclass(frozen=True)
 class Config:
@@ -68,11 +61,30 @@ class Config:
 
 
 @dataclass(frozen=True)
-class JobResult:
+class JobResultLocked:
+    name: str
+
+
+@dataclass(frozen=True)
+class JobResultRan:
     name: str
     exit_status: int
     stdout: str
     stderr: str
+
+
+@dataclass(frozen=True)
+class JobResultTooEarly:
+    name: str
+
+
+if TYPE_CHECKING:
+    Env = dict[str, str]
+    JobResult = Union[JobResultLocked, JobResultRan, JobResultTooEarly]
+
+    class Notifier(Protocol):
+        def __call__(self, result: JobResult) -> None:
+            ...
 
 
 def load_env(*env_files: Path) -> Env:
@@ -113,6 +125,9 @@ def notify_user(result: JobResult, *, config: Config) -> None:
 
 
 def notify_user_by_email(result: JobResult) -> None:
+    if not isinstance(result, JobResultRan):
+        return
+
     msg = EmailMessage()
 
     subj_template = (
@@ -141,24 +156,22 @@ def notify_user_by_email(result: JobResult) -> None:
     smtp.quit()
 
 
-def run_job_with_lock(
-    job_dir: Path, *, config: Config, name: str = ""
-) -> JobResult | None:
+def run_job(job_dir: Path, *, config: Config, name: str = "") -> JobResult:
+    if not name:
+        name = job_dir.name
+
     try:
         with portalocker.Lock(
             config.state_dir / name / FileDirNames.RUNNING_LOCK,
             fail_when_locked=True,
             mode="a",
         ):
-            return run_job(job_dir, config=config, name=name)
+            return run_job_without_lock(job_dir, config=config, name=name)
     except portalocker.AlreadyLocked:
-        pass
+        return JobResultLocked(name=name)
 
 
-def run_job(job_dir: Path, *, config: Config, name: str = "") -> JobResult | None:
-    if not name:
-        name = job_dir.name
-
+def run_job_without_lock(job_dir: Path, *, config: Config, name: str) -> JobResult:
     env = load_env(config.config_dir / FileDirNames.ENV, job_dir / FileDirNames.ENV)
 
     filename = read_text_or_default(job_dir / FileDirNames.FILENAME, Defaults.FILENAME)
@@ -170,7 +183,7 @@ def run_job(job_dir: Path, *, config: Config, name: str = "") -> JobResult | Non
     min_delay = parse_schedule(schedule).total_seconds()
 
     if last_run is not None and time.time() - last_run < min_delay:
-        return None
+        return JobResultTooEarly(name=name)
 
     last_run_file.parent.mkdir(parents=True, exist_ok=True)
     last_run_file.touch(exist_ok=True)
@@ -179,7 +192,7 @@ def run_job(job_dir: Path, *, config: Config, name: str = "") -> JobResult | Non
         [job_dir / filename], capture_output=True, check=False, env=env, text=True
     )
 
-    result = JobResult(
+    result = JobResultRan(
         name=name,
         exit_status=completed.returncode,
         stdout=completed.stdout,
@@ -200,6 +213,14 @@ def run_job(job_dir: Path, *, config: Config, name: str = "") -> JobResult | Non
     return result
 
 
+def run_session(config: Config) -> list[JobResult]:
+    return [
+        run_job(item, config=config)
+        for item in (config.config_dir / FileDirNames.JOBS).iterdir()
+        if item.is_dir()
+    ]
+
+
 def main() -> None:
     dirs = PlatformDirs(APP_NAME, APP_AUTHOR)
 
@@ -209,11 +230,7 @@ def main() -> None:
         state_dir=Path(environ.get(EnvVars.STATE_DIR, dirs.user_state_path)),
     )
 
-    for item in (config.config_dir / FileDirNames.JOBS).iterdir():
-        if not item.is_dir():
-            continue
-
-        run_job_with_lock(item, config=config)
+    run_session(config)
 
 
 if __name__ == "__main__":
