@@ -40,7 +40,7 @@ class FileDirNames:
 
 
 class Messages:
-    RESULT_TITLE_FAILURE = "Job {name!r} failed with code {returncode}"
+    RESULT_TITLE_FAILURE = "Job {name!r} failed with code {exit_status}"
     RESULT_TITLE_SUCCESS = "Job {name!r} succeeded"
     RESULT_TEXT = "stderr:\n{stderr}\nstdout:\n{stdout}"
 
@@ -56,9 +56,7 @@ if TYPE_CHECKING:
     Env = dict[str, str]
 
     class Notifier(Protocol):
-        def __call__(
-            self, job_dir: Path, *, returncode: int, stdout: str, stderr: str
-        ) -> None:
+        def __call__(self, result: JobResult) -> None:
             ...
 
 
@@ -67,6 +65,14 @@ class Config:
     config_dir: Path
     notifiers: list[Notifier]
     state_dir: Path
+
+
+@dataclass(frozen=True)
+class JobResult:
+    name: str
+    exit_status: int
+    stdout: str
+    stderr: str
 
 
 def load_env(*env_files: Path) -> Env:
@@ -101,31 +107,32 @@ def parse_schedule(schedule: str) -> timedelta:
     )
 
 
-def notify_user(
-    job_dir: Path, *, config: Config, returncode: int, stdout: str, stderr: str
-) -> None:
+def notify_user(result: JobResult, *, config: Config) -> None:
     for notifier in config.notifiers:
-        notifier(job_dir, returncode=returncode, stdout=stdout, stderr=stderr)
+        notifier(result)
 
 
-def notify_user_by_email(
-    job_dir: Path, *, returncode: int, stdout: str, stderr: str
-) -> None:
+def notify_user_by_email(result: JobResult) -> None:
     msg = EmailMessage()
 
     subj_template = (
         Messages.RESULT_TITLE_SUCCESS
-        if returncode == 0
+        if result.exit_status == 0
         else Messages.RESULT_TITLE_FAILURE
     )
 
-    msg["Subject"] = subj_template.format(name=job_dir.name, returncode=returncode)
+    msg["Subject"] = subj_template.format(
+        name=result.name, exit_status=result.exit_status
+    )
     msg["From"] = APP_NAME
     msg["To"] = getpass.getuser()
 
     msg.set_content(
         Messages.RESULT_TEXT.format(
-            name=job_dir.name, returncode=returncode, stdout=stdout, stderr=stderr
+            name=result.name,
+            exit_status=result.exit_status,
+            stdout=result.stdout,
+            stderr=result.stderr,
         )
     )
 
@@ -134,19 +141,21 @@ def notify_user_by_email(
     smtp.quit()
 
 
-def run_job_with_lock(job_dir: Path, *, config: Config, name: str = "") -> None:
+def run_job_with_lock(
+    job_dir: Path, *, config: Config, name: str = ""
+) -> JobResult | None:
     try:
         with portalocker.Lock(
             config.state_dir / name / FileDirNames.RUNNING_LOCK,
             fail_when_locked=True,
             mode="a",
         ):
-            run_job(job_dir, config=config, name=name)
+            return run_job(job_dir, config=config, name=name)
     except portalocker.AlreadyLocked:
         pass
 
 
-def run_job(job_dir: Path, *, config: Config, name: str = "") -> None:
+def run_job(job_dir: Path, *, config: Config, name: str = "") -> JobResult | None:
     if not name:
         name = job_dir.name
 
@@ -161,7 +170,7 @@ def run_job(job_dir: Path, *, config: Config, name: str = "") -> None:
     min_delay = parse_schedule(schedule).total_seconds()
 
     if last_run is not None and time.time() - last_run < min_delay:
-        return
+        return None
 
     last_run_file.parent.mkdir(parents=True, exist_ok=True)
     last_run_file.touch(exist_ok=True)
@@ -170,19 +179,25 @@ def run_job(job_dir: Path, *, config: Config, name: str = "") -> None:
         [job_dir / filename], capture_output=True, check=False, env=env, text=True
     )
 
+    result = JobResult(
+        name=name,
+        exit_status=completed.returncode,
+        stdout=completed.stdout,
+        stderr=completed.stderr,
+    )
+
     if (job_dir / FileDirNames.NEVER_NOTIFY).exists() or (
         completed.returncode == 0
         and not (job_dir / FileDirNames.ALWAYS_NOTIFY).exists()
     ):
-        return
+        return result
 
     notify_user(
-        job_dir,
+        result,
         config=config,
-        returncode=completed.returncode,
-        stdout=completed.stdout,
-        stderr=completed.stderr,
     )
+
+    return result
 
 
 def main() -> None:
