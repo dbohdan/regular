@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import getpass
 import re
+import smtplib
 import subprocess as sp
 import time
 from dataclasses import dataclass
 from datetime import timedelta
+from email.message import EmailMessage
 from functools import reduce
 from os import environ
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from dotenv import dotenv_values
 from platformdirs import PlatformDirs
@@ -25,11 +28,19 @@ class EnvVars:
 
 
 class FileDirNames:
+    ALWAYS_NOTIFY = "always-notify"
     ENV = "env"
     FILENAME = "filename"
     JOBS = "jobs"
     LAST_RUN = "last"
+    NEVER_NOTIFY = "never-notify"
     SCHEDULE = "schedule"
+
+
+class Messages:
+    RESULT_TITLE_FAILURE = "Job {name!r} failed with code {returncode}"
+    RESULT_TITLE_SUCCESS = "Job {name!r} succeeded"
+    RESULT_TEXT = "stderr:\n{stderr}\nstdout:\n{stdout}"
 
 
 APP_NAME = "regular"
@@ -41,10 +52,17 @@ SCHEDULE_RE = " *".join(
 if TYPE_CHECKING:
     Env = dict[str, str]
 
+    class Notifier(Protocol):
+        def __call__(
+            self, job_dir: Path, *, returncode: int, stdout: str, stderr: str
+        ) -> None:
+            ...
+
 
 @dataclass(frozen=True)
 class Config:
     config_dir: Path
+    notifiers: list[Notifier]
     state_dir: Path
 
 
@@ -80,6 +98,39 @@ def parse_schedule(schedule: str) -> timedelta:
     )
 
 
+def notify_user(
+    job_dir: Path, *, config: Config, returncode: int, stdout: str, stderr: str
+) -> None:
+    for notifier in config.notifiers:
+        notifier(job_dir, returncode=returncode, stdout=stdout, stderr=stderr)
+
+
+def notify_user_by_email(
+    job_dir: Path, *, returncode: int, stdout: str, stderr: str
+) -> None:
+    msg = EmailMessage()
+
+    subj_template = (
+        Messages.RESULT_TITLE_SUCCESS
+        if returncode == 0
+        else Messages.RESULT_TITLE_FAILURE
+    )
+
+    msg["Subject"] = subj_template.format(name=job_dir.name, returncode=returncode)
+    msg["From"] = APP_NAME
+    msg["To"] = getpass.getuser()
+
+    msg.set_content(
+        Messages.RESULT_TEXT.format(
+            name=job_dir.name, returncode=returncode, stdout=stdout, stderr=stderr
+        )
+    )
+
+    smtp = smtplib.SMTP("localhost")
+    smtp.send_message(msg)
+    smtp.quit()
+
+
 def run_job(job_dir: Path, *, config: Config) -> None:
     env = load_env(config.config_dir / FileDirNames.ENV, job_dir / FileDirNames.ENV)
 
@@ -93,11 +144,24 @@ def run_job(job_dir: Path, *, config: Config) -> None:
 
     min_delay = parse_schedule(schedule).total_seconds()
 
-    if last_run is None or time.time() - last_run > min_delay:
-        sp.run([job_dir / filename], check=True, env=env)
+    if last_run is not None and time.time() - last_run < min_delay:
+        return
 
-        last_run_file.parent.mkdir(parents=True, exist_ok=True)
-        last_run_file.touch(exist_ok=True)
+    last_run_file.parent.mkdir(parents=True, exist_ok=True)
+    last_run_file.touch(exist_ok=True)
+
+    completed = sp.run(
+        [job_dir / filename], capture_output=True, check=False, env=env, text=True
+    )
+
+    if not (job_dir / FileDirNames.NEVER_NOTIFY).exists() and (completed.returncode != 0 or (job_dir / FileDirNames.ALWAYS_NOTIFY).exists()):
+        notify_user(
+            job_dir,
+            config=config,
+            returncode=completed.returncode,
+            stdout=completed.stdout,
+            stderr=completed.stderr,
+        )
 
 
 def main() -> None:
@@ -105,6 +169,7 @@ def main() -> None:
 
     config = Config(
         config_dir=Path(environ.get(EnvVars.CONFIG_DIR, dirs.user_config_path)),
+        notifiers=[notify_user_by_email],
         state_dir=Path(environ.get(EnvVars.STATE_DIR, dirs.user_state_path)),
     )
 
