@@ -13,6 +13,7 @@ from os import environ
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
+import portalocker
 from dotenv import dotenv_values
 from platformdirs import PlatformDirs
 
@@ -34,6 +35,7 @@ class FileDirNames:
     JOBS = "jobs"
     LAST_RUN = "last"
     NEVER_NOTIFY = "never-notify"
+    RUNNING_LOCK = "lock"
     SCHEDULE = "schedule"
 
 
@@ -132,15 +134,28 @@ def notify_user_by_email(
     smtp.quit()
 
 
-def run_job(job_dir: Path, *, config: Config) -> None:
+def run_job_with_lock(job_dir: Path, *, config: Config, name: str = "") -> None:
+    try:
+        with portalocker.Lock(
+            config.state_dir / name / FileDirNames.RUNNING_LOCK,
+            fail_when_locked=True,
+            mode="a",
+        ):
+            run_job(job_dir, config=config, name=name)
+    except portalocker.AlreadyLocked:
+        pass
+
+
+def run_job(job_dir: Path, *, config: Config, name: str = "") -> None:
+    if not name:
+        name = job_dir.name
+
     env = load_env(config.config_dir / FileDirNames.ENV, job_dir / FileDirNames.ENV)
 
     filename = read_text_or_default(job_dir / FileDirNames.FILENAME, Defaults.FILENAME)
     schedule = read_text_or_default(job_dir / FileDirNames.SCHEDULE, Defaults.SCHEDULE)
 
-    last_run_file = (
-        config.state_dir / FileDirNames.JOBS / job_dir.name / FileDirNames.LAST_RUN
-    )
+    last_run_file = config.state_dir / FileDirNames.JOBS / name / FileDirNames.LAST_RUN
     last_run = last_run_file.stat().st_mtime if last_run_file.exists() else None
 
     min_delay = parse_schedule(schedule).total_seconds()
@@ -183,7 +198,7 @@ def main() -> None:
         if not item.is_dir():
             continue
 
-        run_job(item, config=config)
+        run_job_with_lock(item, config=config)
 
 
 if __name__ == "__main__":
