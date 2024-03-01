@@ -1,0 +1,4 @@
+#! /bin/sh
+
+echo 'You should not see this message.'
+exit 99

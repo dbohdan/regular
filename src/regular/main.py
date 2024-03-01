@@ -11,7 +11,7 @@ from email.message import EmailMessage
 from functools import reduce
 from os import environ
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, Union
+from typing import Protocol, Union
 
 import portalocker
 from dotenv import dotenv_values
@@ -60,6 +60,9 @@ class Config:
     state_dir: Path
 
 
+Env = dict[str, str]
+
+
 @dataclass(frozen=True)
 class JobResultLocked:
     name: str
@@ -78,13 +81,12 @@ class JobResultTooEarly:
     name: str
 
 
-if TYPE_CHECKING:
-    Env = dict[str, str]
-    JobResult = Union[JobResultLocked, JobResultRan, JobResultTooEarly]
+JobResult = Union[JobResultLocked, JobResultRan, JobResultTooEarly]
 
-    class Notifier(Protocol):
-        def __call__(self, result: JobResult) -> None:
-            ...
+
+class Notifier(Protocol):
+    def __call__(self, result: JobResult) -> None:
+        ...
 
 
 def load_env(*env_files: Path) -> Env:
@@ -219,7 +221,7 @@ def run_job_without_lock(job_dir: Path, *, config: Config, name: str) -> JobResu
 def run_session(config: Config) -> list[JobResult]:
     return [
         run_job(item, config=config)
-        for item in (config.config_dir / FileDirNames.JOBS).iterdir()
+        for item in sorted((config.config_dir / FileDirNames.JOBS).iterdir())
         if item.is_dir()
     ]
 
