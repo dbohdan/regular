@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import concurrent.futures
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from regular import (
@@ -65,6 +66,15 @@ class TestRegular:
         assert isinstance(results[0], JobResultCompleted)
         assert results[0].stdout.strip().endswith("configs/cwd/jobs/cwd")
 
+    def test_session_concurrent(self, tmp_path) -> None:
+        config, _ = config_and_log("concurrent", tmp_path)
+        start_time = time.time()
+        results = run_session(config)
+        duration = time.time() - start_time
+
+        assert len(results) == 10
+        assert 2 < duration < 3
+
     def test_session_env(self, tmp_path) -> None:
         config, _ = config_and_log("env", tmp_path)
 
@@ -123,7 +133,7 @@ class TestRegular:
         def run_wait_job(_: int) -> JobResult:
             return run_job(wait_job, config=config)
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        with ThreadPoolExecutor(max_workers=2) as executor:
             results = executor.map(run_wait_job, range(2))
 
         assert set(results) == {

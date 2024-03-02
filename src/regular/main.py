@@ -5,6 +5,7 @@ import re
 import smtplib
 import subprocess as sp
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import timedelta
 from email.message import EmailMessage
@@ -34,6 +35,7 @@ class FileDirNames:
     FILENAME = "filename"
     JOBS = "jobs"
     LAST_RUN = "last"
+    MAX_WORKERS = "max-workers"
     NEVER_NOTIFY = "never-notify"
     RUNNING_LOCK = "lock"
     SCHEDULE = "schedule"
@@ -225,11 +227,22 @@ def run_job_without_lock(job_dir: Path, *, config: Config, name: str) -> JobResu
 
 
 def run_session(config: Config) -> list[JobResult]:
-    return [
-        run_job(item, config=config)
+    def run_job_with_config(item: Path):
+        return run_job(item, config=config)
+
+    dir_items = [
+        item
         for item in sorted((config.config_dir / FileDirNames.JOBS).iterdir())
         if item.is_dir()
     ]
+
+    max_workers_file = config.config_dir / FileDirNames.MAX_WORKERS
+    max_workers = (
+        int(max_workers_file.read_text().strip()) if max_workers_file.exists() else None
+    )
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        return list(executor.map(run_job_with_config, dir_items))
 
 
 def main() -> None:
