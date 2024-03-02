@@ -11,7 +11,7 @@ from email.message import EmailMessage
 from functools import reduce
 from os import environ
 from pathlib import Path
-from typing import Protocol, Union
+from typing import Protocol
 
 import portalocker
 from dotenv import dotenv_values
@@ -64,24 +64,25 @@ Env = dict[str, str]
 
 
 @dataclass(frozen=True)
-class JobResultLocked:
+class JobResult:
     name: str
 
 
 @dataclass(frozen=True)
-class JobResultRan:
-    name: str
+class JobResultLocked(JobResult):
+    pass
+
+
+@dataclass(frozen=True)
+class JobResultCompleted(JobResult):
     exit_status: int
     stdout: str
     stderr: str
 
 
 @dataclass(frozen=True)
-class JobResultTooEarly:
-    name: str
-
-
-JobResult = Union[JobResultLocked, JobResultRan, JobResultTooEarly]
+class JobResultSkipped(JobResult):
+    pass
 
 
 class Notifier(Protocol):
@@ -127,7 +128,7 @@ def notify_user(result: JobResult, *, config: Config) -> None:
 
 
 def notify_user_by_email(result: JobResult) -> None:
-    if not isinstance(result, JobResultRan):
+    if not isinstance(result, JobResultCompleted):
         return
 
     msg = EmailMessage()
@@ -188,7 +189,7 @@ def run_job_without_lock(job_dir: Path, *, config: Config, name: str) -> JobResu
     min_delay = parse_schedule(schedule).total_seconds()
 
     if last_run is not None and time.time() - last_run < min_delay:
-        return JobResultTooEarly(name=name)
+        return JobResultSkipped(name=name)
 
     last_run_file.parent.mkdir(parents=True, exist_ok=True)
     last_run_file.touch(exist_ok=True)
@@ -202,7 +203,7 @@ def run_job_without_lock(job_dir: Path, *, config: Config, name: str) -> JobResu
         text=True,
     )
 
-    result = JobResultRan(
+    result = JobResultCompleted(
         name=name,
         exit_status=completed.returncode,
         stdout=completed.stdout,

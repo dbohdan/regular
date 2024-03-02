@@ -7,9 +7,9 @@ from regular import (
     Config,
     FileDirNames,
     JobResult,
+    JobResultCompleted,
     JobResultLocked,
-    JobResultRan,
-    JobResultTooEarly,
+    JobResultSkipped,
     run_job,
     run_session,
 )
@@ -46,15 +46,15 @@ class TestRegular:
         results = run_session(config)
 
         assert results == [
-            JobResultRan(name="bar", exit_status=0, stdout="bar\n", stderr=""),
-            JobResultRan(name="foo", exit_status=0, stdout="foo\n", stderr=""),
+            JobResultCompleted(name="bar", exit_status=0, stdout="bar\n", stderr=""),
+            JobResultCompleted(name="foo", exit_status=0, stdout="foo\n", stderr=""),
         ]
 
         results = run_session(config)
 
         assert results == [
-            JobResultTooEarly(name="bar"),
-            JobResultTooEarly(name="foo"),
+            JobResultSkipped(name="bar"),
+            JobResultSkipped(name="foo"),
         ]
 
     def test_session_cwd(self, tmp_path) -> None:
@@ -62,8 +62,8 @@ class TestRegular:
 
         results = run_session(config)
 
-        assert isinstance(results[0], JobResultRan)
-        assert results[0].stdout == ""
+        assert isinstance(results[0], JobResultCompleted)
+        assert results[0].stdout.strip().endswith("configs/cwd/jobs/cwd")
 
     def test_session_env(self, tmp_path) -> None:
         config, _ = config_and_log("env", tmp_path)
@@ -71,10 +71,10 @@ class TestRegular:
         results = run_session(config)
 
         assert results == [
-            JobResultRan(
+            JobResultCompleted(
                 name="greet", exit_status=0, stdout="Hello, world!\n", stderr=""
             ),
-            JobResultRan(
+            JobResultCompleted(
                 name="override",
                 exit_status=0,
                 stdout="Message overridden.\n",
@@ -88,7 +88,7 @@ class TestRegular:
         results = run_session(config)
 
         assert results == [
-            JobResultRan(
+            JobResultCompleted(
                 name="failure", exit_status=99, stdout="failure\n", stderr="nope\n"
             ),
         ]
@@ -99,10 +99,10 @@ class TestRegular:
         results = run_session(config)
 
         assert results == [
-            JobResultRan(
+            JobResultCompleted(
                 name="always-notify", exit_status=0, stdout="always\n", stderr=""
             ),
-            JobResultRan(
+            JobResultCompleted(
                 name="never-notify",
                 exit_status=99,
                 stdout="You should not see this message.\n",
@@ -111,7 +111,7 @@ class TestRegular:
         ]
 
         assert log == [
-            JobResultRan(
+            JobResultCompleted(
                 name="always-notify", exit_status=0, stdout="always\n", stderr=""
             ),
         ]
@@ -127,6 +127,6 @@ class TestRegular:
             results = executor.map(run_wait_job, range(2))
 
         assert set(results) == {
-            JobResultRan(name="wait", exit_status=0, stdout="", stderr=""),
+            JobResultCompleted(name="wait", exit_status=0, stdout="", stderr=""),
             JobResultLocked(name="wait"),
         }
