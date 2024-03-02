@@ -34,7 +34,6 @@ class FileDirNames:
     ALWAYS_NOTIFY = "always-notify"
     ENV = "env"
     FILENAME = "filename"
-    JOBS = "jobs"
     LAST_RUN = "last"
     MAX_WORKERS = "max-workers"
     NEVER_NOTIFY = "never-notify"
@@ -185,7 +184,7 @@ def run_job_without_lock(job_dir: Path, *, config: Config, name: str) -> JobResu
     filename = read_text_or_default(job_dir / FileDirNames.FILENAME, Defaults.FILENAME)
     schedule = read_text_or_default(job_dir / FileDirNames.SCHEDULE, Defaults.SCHEDULE)
 
-    last_run_file = config.state_dir / FileDirNames.JOBS / name / FileDirNames.LAST_RUN
+    last_run_file = config.state_dir / name / FileDirNames.LAST_RUN
     last_run = last_run_file.stat().st_mtime if last_run_file.exists() else None
 
     min_delay = parse_schedule(schedule).total_seconds()
@@ -232,7 +231,7 @@ def run_session(config: Config) -> list[JobResult]:
 
     dir_items = [
         item
-        for item in sorted((config.config_dir / FileDirNames.JOBS).iterdir())
+        for item in sorted(config.config_dir.iterdir())
         if item.is_dir()
     ]
 

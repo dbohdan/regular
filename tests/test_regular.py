@@ -6,7 +6,6 @@ from pathlib import Path
 
 from regular import (
     Config,
-    FileDirNames,
     JobResult,
     JobResultCompleted,
     JobResultLocked,
@@ -19,7 +18,7 @@ TEST_DIR = Path(__file__).parent
 
 
 def job_path(configs_subdir: str, job_name: str) -> Path:
-    return TEST_DIR / "configs" / configs_subdir / FileDirNames.JOBS / job_name
+    return TEST_DIR / "configs" / configs_subdir / job_name
 
 
 def config_and_log(
@@ -64,7 +63,7 @@ class TestRegular:
         results = run_session(config)
 
         assert isinstance(results[0], JobResultCompleted)
-        assert results[0].stdout.strip().endswith("configs/cwd/jobs/cwd")
+        assert results[0].stdout.strip().endswith("configs/cwd/cwd")
 
     def test_session_concurrent(self, tmp_path) -> None:
         config, _ = config_and_log("concurrent", tmp_path)
