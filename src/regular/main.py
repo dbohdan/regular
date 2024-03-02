@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import getpass
+import operator
 import re
 import smtplib
 import subprocess as sp
@@ -88,13 +89,12 @@ class JobResultSkipped(JobResult):
 
 
 class Notifier(Protocol):
-    def __call__(self, result: JobResult) -> None:
-        ...
+    def __call__(self, result: JobResult) -> None: ...
 
 
 def load_env(*env_files: Path) -> Env:
     return reduce(
-        lambda x, y: x | y,
+        operator.or_,
         [*(dotenv_values(env_file) for env_file in env_files), environ],
     )
 
@@ -194,7 +194,7 @@ def run_job_without_lock(job_dir: Path, *, config: Config, name: str) -> JobResu
         return JobResultSkipped(name=name)
 
     last_run_file.parent.mkdir(parents=True, exist_ok=True)
-    last_run_file.touch(exist_ok=True)
+    last_run_file.touch()
 
     completed = sp.run(
         [job_dir / filename],
