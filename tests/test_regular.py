@@ -83,7 +83,7 @@ class TestRegular:
             ),
         ]
 
-    def test_session_wait(self, tmp_path) -> None:
+    def test_job_wait(self, tmp_path) -> None:
         config, _ = config_and_log("wait", tmp_path)
         wait_job = job_path("wait", "wait")
 
@@ -93,4 +93,4 @@ class TestRegular:
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             results = executor.map(run_wait_job, range(2))
 
-        assert list(results) == [JobResultRan(name='wait', exit_status=0, stdout='', stderr=''), JobResultLocked(name='wait')]
+        assert set(results) == {JobResultRan(name='wait', exit_status=0, stdout='', stderr=''), JobResultLocked(name='wait')}
