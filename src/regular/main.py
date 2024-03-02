@@ -194,7 +194,12 @@ def run_job_without_lock(job_dir: Path, *, config: Config, name: str) -> JobResu
     last_run_file.touch(exist_ok=True)
 
     completed = sp.run(
-        [job_dir / filename], capture_output=True, check=False, env=env, text=True
+        [job_dir / filename],
+        capture_output=True,
+        check=False,
+        cwd=job_dir,
+        env=env,
+        text=True,
     )
 
     result = JobResultRan(

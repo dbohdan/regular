@@ -57,6 +57,14 @@ class TestRegular:
             JobResultTooEarly(name="foo"),
         ]
 
+    def test_session_cwd(self, tmp_path) -> None:
+        config, _ = config_and_log("cwd", tmp_path)
+
+        results = run_session(config)
+
+        assert isinstance(results[0], JobResultRan)
+        assert results[0].stdout == ""
+
     def test_session_env(self, tmp_path) -> None:
         config, _ = config_and_log("env", tmp_path)
 
