@@ -1,0 +1,2 @@
+PART="Hello, "
+MESSAGE=${PART}world!

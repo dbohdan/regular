@@ -3,8 +3,16 @@ from __future__ import annotations
 import concurrent.futures
 from pathlib import Path
 
-from regular import Config, FileDirNames, JobResult, JobResultLocked, JobResultRan, JobResultTooEarly
-from regular import run_job, run_session
+from regular import (
+    Config,
+    FileDirNames,
+    JobResult,
+    JobResultLocked,
+    JobResultRan,
+    JobResultTooEarly,
+    run_job,
+    run_session,
+)
 
 TEST_DIR = Path(__file__).parent
 
@@ -47,6 +55,23 @@ class TestRegular:
         assert results == [
             JobResultTooEarly(name="bar"),
             JobResultTooEarly(name="foo"),
+        ]
+
+    def test_session_env(self, tmp_path) -> None:
+        config, _ = config_and_log("env", tmp_path)
+
+        results = run_session(config)
+
+        assert results == [
+            JobResultRan(
+                name="greet", exit_status=0, stdout="Hello, world!\n", stderr=""
+            ),
+            JobResultRan(
+                name="override",
+                exit_status=0,
+                stdout="Message overridden.\n",
+                stderr="",
+            ),
         ]
 
     def test_session_failure(self, tmp_path) -> None:
@@ -93,4 +118,7 @@ class TestRegular:
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             results = executor.map(run_wait_job, range(2))
 
-        assert set(results) == {JobResultRan(name='wait', exit_status=0, stdout='', stderr=''), JobResultLocked(name='wait')}
+        assert set(results) == {
+            JobResultRan(name="wait", exit_status=0, stdout="", stderr=""),
+            JobResultLocked(name="wait"),
+        }
