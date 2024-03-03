@@ -7,17 +7,21 @@ import smtplib
 import subprocess as sp
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from datetime import timedelta
 from email.message import EmailMessage
 from functools import reduce
 from os import environ
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import portalocker
 from dotenv import dotenv_values
 from platformdirs import PlatformDirs
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 class Defaults:
@@ -37,6 +41,9 @@ class FileDirNames:
     LAST_RUN = "last"
     MAX_WORKERS = "max-workers"
     NEVER_NOTIFY = "never-notify"
+    QUEUE_DIR = "queue"
+    QUEUE_NAME = "queue"
+    QUEUE_TEMPLATE = "{time}-{name}"
     RUNNING_LOCK = "lock"
     SCHEDULE = "schedule"
 
@@ -52,6 +59,7 @@ APP_AUTHOR = "dbohdan"
 SCHEDULE_RE = " *".join(
     ["", *(rf"(?:(\d+) *({unit}))?" for unit in ("w", "d", "h", "m", "s")), ""]
 )
+QUEUE_LOCK_WAIT = 0.01
 SMTP_SERVER = "127.0.0.1"
 
 
@@ -160,6 +168,63 @@ def notify_user_by_email(result: JobResult) -> None:
     smtp.quit()
 
 
+@contextmanager
+def run_job_in_queue(queue_dir: Path, /, name: str) -> Iterator[None]:
+    """
+    The algorithm is based on <https://github.com/leahneukirchen/nq>.
+    The bugs are all ours.
+    """
+    queue_dir.mkdir(parents=True, exist_ok=True)
+
+    # The length of the `time` field will remain constant until late 2286,
+    # enabling simple sorting.
+    filename = FileDirNames.QUEUE_TEMPLATE.format(
+        name=name, time=f"{time.time_ns() // 1_000_000:013d}"
+    )
+    my_lock_file_hidden = queue_dir / f".{filename}"
+    my_lock_file = queue_dir / filename
+
+    with my_lock_file_hidden.open(mode="w") as my_f:
+        try:
+            portalocker.lock(my_f, portalocker.LOCK_EX)
+            my_lock_file_hidden.rename(my_lock_file)
+
+            time.sleep(QUEUE_LOCK_WAIT)
+
+            seen_locks = set()
+            while True:
+                locks = {
+                    item
+                    for item in queue_dir.iterdir()
+                    if item not in seen_locks
+                    and not item.name.startswith(".")
+                    and item.name < my_lock_file.name
+                }
+
+                if not locks:
+                    break
+
+                for lock_file in sorted(locks):
+                    # If the lock file has been removed,
+                    # that is fine by us.
+                    # Ignore it.
+                    # If the lock file exists,
+                    # try to lock it ourselves in order to wait
+                    # until others release it.
+                    with suppress(FileNotFoundError):  # noqa: SIM117
+                        with lock_file.open() as f:
+                            portalocker.lock(f, flags=portalocker.LOCK_SH)
+
+                seen_locks = seen_locks | locks
+
+            yield
+        finally:
+            with suppress(FileNotFoundError):
+                my_lock_file_hidden.unlink()
+            with suppress(FileNotFoundError):
+                my_lock_file.unlink()
+
+
 def run_job(job_dir: Path, *, config: Config, name: str = "") -> JobResult:
     if not name:
         name = job_dir.name
@@ -173,12 +238,17 @@ def run_job(job_dir: Path, *, config: Config, name: str = "") -> JobResult:
             fail_when_locked=True,
             mode="a",
         ):
-            return run_job_without_lock(job_dir, config=config, name=name)
+            queue_name = read_text_or_default(job_dir / FileDirNames.QUEUE_NAME, name)
+
+            with run_job_in_queue(
+                config.state_dir / queue_name / FileDirNames.QUEUE_DIR, name
+            ):
+                return run_job_no_lock_no_queue(job_dir, config=config, name=name)
     except portalocker.AlreadyLocked:
         return JobResultLocked(name=name)
 
 
-def run_job_without_lock(job_dir: Path, *, config: Config, name: str) -> JobResult:
+def run_job_no_lock_no_queue(job_dir: Path, *, config: Config, name: str) -> JobResult:
     env = load_env(config.config_dir / FileDirNames.ENV, job_dir / FileDirNames.ENV)
 
     filename = read_text_or_default(job_dir / FileDirNames.FILENAME, Defaults.FILENAME)
@@ -211,16 +281,13 @@ def run_job_without_lock(job_dir: Path, *, config: Config, name: str) -> JobResu
         stderr=completed.stderr,
     )
 
-    if (job_dir / FileDirNames.NEVER_NOTIFY).exists() or (
-        completed.returncode == 0
-        and not (job_dir / FileDirNames.ALWAYS_NOTIFY).exists()
+    if not (job_dir / FileDirNames.NEVER_NOTIFY).exists() and (
+        completed.returncode != 0 or (job_dir / FileDirNames.ALWAYS_NOTIFY).exists()
     ):
-        return result
-
-    notify_user(
-        result,
-        config=config,
-    )
+        notify_user(
+            result,
+            config=config,
+        )
 
     return result
 
@@ -229,11 +296,7 @@ def run_session(config: Config) -> list[JobResult]:
     def run_job_with_config(item: Path):
         return run_job(item, config=config)
 
-    dir_items = [
-        item
-        for item in sorted(config.config_dir.iterdir())
-        if item.is_dir()
-    ]
+    dir_items = [item for item in sorted(config.config_dir.iterdir()) if item.is_dir()]
 
     max_workers_file = config.config_dir / FileDirNames.MAX_WORKERS
     max_workers = (

@@ -125,6 +125,21 @@ class TestRegular:
             ),
         ]
 
+    def test_session_queue(self, tmp_path) -> None:
+        config, _ = config_and_log("queue", tmp_path)
+        start_time = time.time()
+        results = run_session(config)
+        duration = time.time() - start_time
+
+        assert results == [
+            JobResultCompleted(name="bar-1", exit_status=0, stdout="", stderr=""),
+            JobResultCompleted(name="bar-2", exit_status=0, stdout="", stderr=""),
+            JobResultCompleted(name="foo-1", exit_status=0, stdout="", stderr=""),
+            JobResultCompleted(name="foo-2", exit_status=0, stdout="", stderr=""),
+            JobResultCompleted(name="foo-3", exit_status=0, stdout="", stderr=""),
+        ]
+        assert 3 < duration < 4
+
     def test_job_wait(self, tmp_path) -> None:
         config, _ = config_and_log("wait", tmp_path)
         wait_job = job_path("wait", "wait")
