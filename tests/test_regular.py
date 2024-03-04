@@ -102,6 +102,17 @@ class TestRegular:
             ),
         ]
 
+    def test_session_filename(self, tmp_path) -> None:
+        config, _ = config_and_log("filename", tmp_path)
+
+        results = run_session(config)
+
+        assert results == [
+            JobResultCompleted(
+                name="foo", exit_status=0, stdout="run.sh\n", stderr=""
+            ),
+        ]
+
     def test_session_notify(self, tmp_path) -> None:
         config, log = config_and_log("notify", tmp_path)
 
