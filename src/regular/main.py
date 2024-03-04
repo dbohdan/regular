@@ -117,6 +117,9 @@ def read_text_or_default(text_file: Path, default: str) -> str:
 
 
 def parse_schedule(schedule: str) -> timedelta:
+    if schedule.strip() == "0":
+        return timedelta()
+
     m = re.fullmatch(SCHEDULE_RE, schedule)
 
     if not m:
