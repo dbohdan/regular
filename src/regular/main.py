@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import getpass
 import operator
 import random
@@ -10,20 +11,25 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from functools import reduce
 from os import environ
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import portalocker
 from dotenv import dotenv_values
 from platformdirs import PlatformDirs
+from rich.console import Console
+from rich.text import Text
+from rich_argparse import RichHelpFormatter
 from typing_extensions import Self
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+    from rich.style import StyleType
 
 
 class Defaults:
@@ -53,6 +59,12 @@ class FileDirNames:
 
 
 class Messages:
+    SHOW_LAST_RUN = "last run"
+    SHOW_LAST_RUN_NEVER = "never"
+    SHOW_NONE = "none"
+    SHOW_NO = "no"
+    SHOW_SHOULD_RUN = "would run now"
+    SHOW_YES = "yes"
     RESULT_TITLE_FAILURE = "Job {name!r} failed with code {exit_status}"
     RESULT_TITLE_SUCCESS = "Job {name!r} succeeded"
     RESULT_TEXT = "stderr:\n{stderr}\nstdout:\n{stdout}"
@@ -65,6 +77,18 @@ SCHEDULE_RE = " *".join(
 )
 QUEUE_LOCK_WAIT = 0.01
 SMTP_SERVER = "127.0.0.1"
+
+console = Console(highlight=False)
+RICH_ARGPARSE_STYLES: dict[str, StyleType] = {
+    "argparse.args": "green",
+    "argparse.groups": "default",
+    "argparse.help": "default",
+    "argparse.metavar": "green",
+    "argparse.prog": "default",
+    "argparse.syntax": "bold",
+    "argparse.text": "default",
+    "argparse.default": "default",
+}
 
 
 @dataclass(frozen=True)
@@ -123,11 +147,12 @@ class Job:
     def last_run_file(self, state_dir: Path) -> Path:
         return state_dir / self.name / FileDirNames.LAST_RUN
 
-    def should_run(self, state_dir: Path) -> bool:
+    def last_run(self, state_dir: Path) -> float | None:
         last_run_file = self.last_run_file(state_dir)
+        return last_run_file.stat().st_mtime if last_run_file.exists() else None
 
-        last_run = last_run_file.stat().st_mtime if last_run_file.exists() else None
-
+    def should_run(self, state_dir: Path) -> bool:
+        last_run = self.last_run(state_dir)
         min_delay = parse_schedule(self.schedule).total_seconds()
 
         return last_run is None or time.time() - last_run >= min_delay
@@ -349,13 +374,19 @@ def run_job_no_lock_no_queue(job: Job, config: Config) -> JobResult:
     return result
 
 
+def load_jobs(directory: Path, /) -> list[Job]:
+    return [Job.load(item) for item in sorted(directory.iterdir()) if item.is_dir()]
+
+
+def list_jobs(config: Config) -> None:
+    console.print("\n".join(job.name for job in load_jobs(config.config_dir)))
+
+
 def run_session(config: Config) -> list[JobResult]:
     def run_job_with_config(job: Job):
         return run_job(job, config)
 
-    jobs = [
-        Job.load(item) for item in sorted(config.config_dir.iterdir()) if item.is_dir()
-    ]
+    jobs = load_jobs(config.config_dir)
 
     max_workers_file = config.config_dir / FileDirNames.MAX_WORKERS
     max_workers = (
@@ -366,7 +397,70 @@ def run_session(config: Config) -> list[JobResult]:
         return list(executor.map(run_job_with_config, jobs))
 
 
+def show_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return Messages.SHOW_YES if value else Messages.SHOW_NO
+
+    if not value:
+        return Messages.SHOW_NONE
+
+    return str(value).strip()
+
+
+def show_job(job: Job, config: Config) -> Text:
+    d = {k: v for k, v in vars(job).items() if k not in ("env", "name")}
+
+    last_run = job.last_run(config.state_dir)
+    d[Messages.SHOW_LAST_RUN] = (
+        datetime.fromtimestamp(last_run, tz=timezone.utc).astimezone()
+        if last_run
+        else last_run
+    )
+
+    d[Messages.SHOW_SHOULD_RUN] = job.should_run(config.state_dir)
+
+    text = Text()
+    text.append(f"{job.name}\n", style="bold")
+
+    for k, v in d.items():
+        text.append(f"    {k}: {show_value(v)}\n")
+
+    return text
+
+
+def show_jobs(config: Config) -> None:
+    jobs = load_jobs(config.config_dir)
+
+    for i, job in enumerate(jobs):
+        console.print(show_job(job, config), end="")
+        if i < len(jobs) - 1:
+            console.print()
+
+
+def cli() -> argparse.Namespace:
+    RichHelpFormatter.group_name_formatter = lambda x: x
+    RichHelpFormatter.styles = RICH_ARGPARSE_STYLES
+
+    parser = argparse.ArgumentParser(
+        description="Run jobs on a regular basis.", formatter_class=RichHelpFormatter
+    )
+    subparsers = parser.add_subparsers(required=True, title="commands")
+
+    list_parser = subparsers.add_parser("list", help="list jobs")
+    list_parser.set_defaults(subcommand="list")
+
+    run_parser = subparsers.add_parser("run", help="run jobs")
+    run_parser.set_defaults(subcommand="run")
+
+    show_parser = subparsers.add_parser("show", help="show job information")
+    show_parser.set_defaults(subcommand="show")
+
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = cli()
+
     dirs = PlatformDirs(APP_NAME, APP_AUTHOR)
 
     config_dir = Path(environ.get(EnvVars.CONFIG_DIR, dirs.user_config_path))
@@ -374,7 +468,15 @@ def main() -> None:
 
     config = Config.load_env(config_dir, [notify_user_by_email], state_dir)
 
-    run_session(config)
+    if args.subcommand == "list":
+        list_jobs(config)
+    elif args.subcommand == "run":
+        run_session(config)
+    elif args.subcommand == "show":
+        show_jobs(config)
+    else:
+        msg = "invalid command"
+        raise ValueError(msg)
 
 
 if __name__ == "__main__":
