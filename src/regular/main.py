@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 class Defaults:
     FILENAME = "script"
     JITTER = ""
-    SCHEDULE = ""
+    SCHEDULE = "1d"
 
 
 class EnvVars:
