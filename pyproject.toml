@@ -36,6 +36,7 @@ python = "^3.9"
 platformdirs = "^4.2.0"
 python-dotenv = "^1.0.1"
 portalocker = "^2.8.2"
+typing-extensions = "^4.10.0"
 
 [tool.poetry.group.dev.dependencies]
 codespell = "^2"

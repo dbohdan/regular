@@ -7,6 +7,7 @@ from pathlib import Path
 from regular import (
     QUEUE_LOCK_WAIT,
     Config,
+    Job,
     JobResult,
     JobResultCompleted,
     JobResultLocked,
@@ -31,7 +32,7 @@ def config_and_log(
         result_log.append(result)
 
     return (
-        Config(
+        Config.load_env(
             config_dir=TEST_DIR / "configs" / configs_subdir,
             notifiers=[test_notify],
             state_dir=state_dir,
@@ -156,10 +157,10 @@ class TestRegular:
 
         def time_job() -> float:
             start_time = time.time()
-            run_job(jitter_job, config=config)
+            run_job(Job.load(jitter_job), config)
             return time.time() - start_time
 
-        times = [time_job() - QUEUE_LOCK_WAIT  for _ in range(20)]
+        times = [time_job() - QUEUE_LOCK_WAIT for _ in range(20)]
 
         # The jitter is a uniformly-distributed random variable.
         # The mean of `times` is therefore approximately a random variable
@@ -175,7 +176,7 @@ class TestRegular:
         wait_job = job_path("wait", "wait")
 
         def run_wait_job(_: int) -> JobResult:
-            return run_job(wait_job, config=config)
+            return run_job(Job.load(wait_job), config)
 
         with ThreadPoolExecutor(max_workers=2) as executor:
             results = executor.map(run_wait_job, range(2))

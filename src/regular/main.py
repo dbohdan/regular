@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import getpass
 import operator
+import random
 import re
 import smtplib
 import subprocess as sp
-import random
 import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Protocol
 import portalocker
 from dotenv import dotenv_values
 from platformdirs import PlatformDirs
+from typing_extensions import Self
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -69,11 +70,67 @@ SMTP_SERVER = "127.0.0.1"
 @dataclass(frozen=True)
 class Config:
     config_dir: Path
+    env: Env
     notifiers: list[Notifier]
     state_dir: Path
 
+    @classmethod
+    def load_env(
+        cls, config_dir: Path, notifiers: list[Notifier], state_dir: Path
+    ) -> Self:
+        return cls(
+            config_dir=config_dir,
+            env=load_env(config_dir / FileDirNames.ENV),
+            notifiers=notifiers,
+            state_dir=state_dir,
+        )
+
 
 Env = dict[str, str]
+
+
+@dataclass(frozen=True)
+class Job:
+    dir: Path
+    env: Env
+    filename: str
+    jitter: str
+    name: str
+    schedule: str
+
+    @classmethod
+    def load(cls, job_dir: Path, *, name: str = "") -> Self:
+        env = load_env(job_dir / FileDirNames.ENV)
+
+        filename = read_text_or_default(
+            job_dir / FileDirNames.FILENAME, Defaults.FILENAME
+        )
+        jitter = read_text_or_default(job_dir / FileDirNames.JITTER, Defaults.JITTER)
+
+        schedule = read_text_or_default(
+            job_dir / FileDirNames.SCHEDULE, Defaults.SCHEDULE
+        )
+
+        return cls(
+            dir=job_dir,
+            env=env,
+            filename=filename,
+            jitter=jitter,
+            name=name if name else job_dir.name,
+            schedule=schedule,
+        )
+
+    def last_run_file(self, state_dir: Path) -> Path:
+        return state_dir / self.name / FileDirNames.LAST_RUN
+
+    def should_run(self, state_dir: Path) -> bool:
+        last_run_file = self.last_run_file(state_dir)
+
+        last_run = last_run_file.stat().st_mtime if last_run_file.exists() else None
+
+        min_delay = parse_schedule(self.schedule).total_seconds()
+
+        return last_run is None or time.time() - last_run >= min_delay
 
 
 @dataclass(frozen=True)
@@ -176,7 +233,7 @@ def notify_user_by_email(result: JobResult) -> None:
 
 
 @contextmanager
-def run_job_in_queue(queue_dir: Path, /, name: str) -> Iterator[None]:
+def run_in_queue(queue_dir: Path, /, name: str) -> Iterator[None]:
     """
     The algorithm is based on <https://github.com/leahneukirchen/nq>.
     The bugs are all ours.
@@ -232,68 +289,57 @@ def run_job_in_queue(queue_dir: Path, /, name: str) -> Iterator[None]:
                 my_lock_file.unlink()
 
 
-def run_job(job_dir: Path, *, config: Config, name: str = "") -> JobResult:
-    if not name:
-        name = job_dir.name
-
-    lock_path = config.state_dir / name / FileDirNames.RUNNING_LOCK
+def run_job(job: Job, config: Config) -> JobResult:
+    lock_path = config.state_dir / job.name / FileDirNames.RUNNING_LOCK
     lock_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
         with portalocker.Lock(
-            config.state_dir / name / FileDirNames.RUNNING_LOCK,
+            config.state_dir / job.name / FileDirNames.RUNNING_LOCK,
             fail_when_locked=True,
             mode="a",
         ):
-            queue_name = read_text_or_default(job_dir / FileDirNames.QUEUE_NAME, name)
+            queue_name = read_text_or_default(
+                job.dir / FileDirNames.QUEUE_NAME, job.name
+            )
 
-            with run_job_in_queue(
-                config.state_dir / queue_name / FileDirNames.QUEUE_DIR, name
+            with run_in_queue(
+                config.state_dir / queue_name / FileDirNames.QUEUE_DIR, job.name
             ):
-                return run_job_no_lock_no_queue(job_dir, config=config, name=name)
+                return run_job_no_lock_no_queue(job, config)
     except portalocker.AlreadyLocked:
-        return JobResultLocked(name=name)
+        return JobResultLocked(name=job.name)
 
 
-def run_job_no_lock_no_queue(job_dir: Path, *, config: Config, name: str) -> JobResult:
-    env = load_env(config.config_dir / FileDirNames.ENV, job_dir / FileDirNames.ENV)
+def run_job_no_lock_no_queue(job: Job, config: Config) -> JobResult:
+    if not job.should_run(config.state_dir):
+        return JobResultSkipped(name=job.name)
 
-    filename = read_text_or_default(job_dir / FileDirNames.FILENAME, Defaults.FILENAME)
-    jitter = read_text_or_default(job_dir / FileDirNames.JITTER, Defaults.JITTER)
-    schedule = read_text_or_default(job_dir / FileDirNames.SCHEDULE, Defaults.SCHEDULE)
+    jitter_seconds = parse_schedule(job.jitter).total_seconds()
+    time.sleep(random.random() * jitter_seconds)  # noqa: S311
 
-    last_run_file = config.state_dir / name / FileDirNames.LAST_RUN
-    last_run = last_run_file.stat().st_mtime if last_run_file.exists() else None
-
-    min_delay = parse_schedule(schedule).total_seconds()
-
-    if last_run is not None and time.time() - last_run < min_delay:
-        return JobResultSkipped(name=name)
-
-    jitter_seconds = parse_schedule(jitter).total_seconds()
-    time.sleep(random.random() * jitter_seconds)
-
+    last_run_file = job.last_run_file(config.state_dir)
     last_run_file.parent.mkdir(parents=True, exist_ok=True)
     last_run_file.touch()
 
     completed = sp.run(
-        [job_dir / filename],
+        [job.dir / job.filename],
         capture_output=True,
         check=False,
-        cwd=job_dir,
-        env=env,
+        cwd=job.dir,
+        env=environ | config.env | job.env,
         text=True,
     )
 
     result = JobResultCompleted(
-        name=name,
+        name=job.name,
         exit_status=completed.returncode,
         stdout=completed.stdout,
         stderr=completed.stderr,
     )
 
-    if not (job_dir / FileDirNames.NEVER_NOTIFY).exists() and (
-        completed.returncode != 0 or (job_dir / FileDirNames.ALWAYS_NOTIFY).exists()
+    if not (job.dir / FileDirNames.NEVER_NOTIFY).exists() and (
+        completed.returncode != 0 or (job.dir / FileDirNames.ALWAYS_NOTIFY).exists()
     ):
         notify_user(
             result,
@@ -304,10 +350,12 @@ def run_job_no_lock_no_queue(job_dir: Path, *, config: Config, name: str) -> Job
 
 
 def run_session(config: Config) -> list[JobResult]:
-    def run_job_with_config(item: Path):
-        return run_job(item, config=config)
+    def run_job_with_config(job: Job):
+        return run_job(job, config)
 
-    dir_items = [item for item in sorted(config.config_dir.iterdir()) if item.is_dir()]
+    jobs = [
+        Job.load(item) for item in sorted(config.config_dir.iterdir()) if item.is_dir()
+    ]
 
     max_workers_file = config.config_dir / FileDirNames.MAX_WORKERS
     max_workers = (
@@ -315,17 +363,16 @@ def run_session(config: Config) -> list[JobResult]:
     )
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        return list(executor.map(run_job_with_config, dir_items))
+        return list(executor.map(run_job_with_config, jobs))
 
 
 def main() -> None:
     dirs = PlatformDirs(APP_NAME, APP_AUTHOR)
 
-    config = Config(
-        config_dir=Path(environ.get(EnvVars.CONFIG_DIR, dirs.user_config_path)),
-        notifiers=[notify_user_by_email],
-        state_dir=Path(environ.get(EnvVars.STATE_DIR, dirs.user_state_path)),
-    )
+    config_dir = Path(environ.get(EnvVars.CONFIG_DIR, dirs.user_config_path))
+    state_dir = Path(environ.get(EnvVars.STATE_DIR, dirs.user_state_path))
+
+    config = Config.load_env(config_dir, [notify_user_by_email], state_dir)
 
     run_session(config)
 
