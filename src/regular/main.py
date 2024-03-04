@@ -5,6 +5,7 @@ import operator
 import re
 import smtplib
 import subprocess as sp
+import random
 import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
 
 class Defaults:
     FILENAME = "script"
+    JITTER = ""
     SCHEDULE = ""
 
 
@@ -38,6 +40,7 @@ class FileDirNames:
     ALWAYS_NOTIFY = "always-notify"
     ENV = "env"
     FILENAME = "filename"
+    JITTER = "jitter"
     LAST_RUN = "last"
     MAX_WORKERS = "max-workers"
     NEVER_NOTIFY = "never-notify"
@@ -57,7 +60,7 @@ class Messages:
 APP_NAME = "regular"
 APP_AUTHOR = "dbohdan"
 SCHEDULE_RE = " *".join(
-    ["", *(rf"(?:(\d+) *({unit}))?" for unit in ("w", "d", "h", "m", "s")), ""]
+    ["", *(rf"(?:(\d+) *({unit}))?" for unit in ("w", "d", "h", "m", "s", "ms")), ""]
 )
 QUEUE_LOCK_WAIT = 0.01
 SMTP_SERVER = "127.0.0.1"
@@ -120,7 +123,7 @@ def parse_schedule(schedule: str) -> timedelta:
         msg = f"invalid schedule: {schedule!r}"
         raise ValueError(msg)
 
-    weeks, _, days, _, hours, _, minutes, _, seconds, _ = m.groups()
+    weeks, _, days, _, hours, _, minutes, _, seconds, _, milliseconds, _ = m.groups()
 
     return timedelta(
         weeks=int(weeks or "0"),
@@ -128,6 +131,7 @@ def parse_schedule(schedule: str) -> timedelta:
         hours=int(hours or "0"),
         minutes=int(minutes or "0"),
         seconds=int(seconds or "0"),
+        milliseconds=int(milliseconds or "0"),
     )
 
 
@@ -252,6 +256,7 @@ def run_job_no_lock_no_queue(job_dir: Path, *, config: Config, name: str) -> Job
     env = load_env(config.config_dir / FileDirNames.ENV, job_dir / FileDirNames.ENV)
 
     filename = read_text_or_default(job_dir / FileDirNames.FILENAME, Defaults.FILENAME)
+    jitter = read_text_or_default(job_dir / FileDirNames.JITTER, Defaults.JITTER)
     schedule = read_text_or_default(job_dir / FileDirNames.SCHEDULE, Defaults.SCHEDULE)
 
     last_run_file = config.state_dir / name / FileDirNames.LAST_RUN
@@ -261,6 +266,9 @@ def run_job_no_lock_no_queue(job_dir: Path, *, config: Config, name: str) -> Job
 
     if last_run is not None and time.time() - last_run < min_delay:
         return JobResultSkipped(name=name)
+
+    jitter_seconds = parse_schedule(jitter).total_seconds()
+    time.sleep(random.random() * jitter_seconds)
 
     last_run_file.parent.mkdir(parents=True, exist_ok=True)
     last_run_file.touch()

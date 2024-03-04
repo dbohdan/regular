@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from regular import (
+    QUEUE_LOCK_WAIT,
     Config,
     JobResult,
     JobResultCompleted,
@@ -108,9 +109,7 @@ class TestRegular:
         results = run_session(config)
 
         assert results == [
-            JobResultCompleted(
-                name="foo", exit_status=0, stdout="run.sh\n", stderr=""
-            ),
+            JobResultCompleted(name="foo", exit_status=0, stdout="run.sh\n", stderr=""),
         ]
 
     def test_session_notify(self, tmp_path) -> None:
@@ -150,6 +149,26 @@ class TestRegular:
             JobResultCompleted(name="foo-3", exit_status=0, stdout="", stderr=""),
         ]
         assert 3 < duration < 4
+
+    def test_job_jitter(self, tmp_path) -> None:
+        config, _ = config_and_log("jitter", tmp_path)
+        jitter_job = job_path("jitter", "jitter")
+
+        def time_job() -> float:
+            start_time = time.time()
+            run_job(jitter_job, config=config)
+            return time.time() - start_time
+
+        times = [time_job() - QUEUE_LOCK_WAIT  for _ in range(20)]
+
+        # The jitter is a uniformly-distributed random variable.
+        # The mean of `times` is therefore approximately a random variable
+        # with the Bates probability distribution.
+        # For it, F(0.75) - F(0.25) ≈ 0.99994,
+        # where F is the cumulative distribution function.
+        # The following assertion
+        # should be true around 9999 times out of 10000.
+        assert 0.025 < sum(sorted(times)) / len(times) < 0.075
 
     def test_job_wait(self, tmp_path) -> None:
         config, _ = config_and_log("wait", tmp_path)
