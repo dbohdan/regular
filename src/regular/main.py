@@ -55,7 +55,7 @@ class FileDirNames:
 
 
 class Messages:
-    SHOW_LAST_RUN = "last run"
+    SHOW_LAST_RUN = "last ran"
     SHOW_LAST_RUN_NEVER = "never"
     SHOW_NONE = "none"
     SHOW_NO = "no"
