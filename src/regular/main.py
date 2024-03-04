@@ -21,15 +21,11 @@ from typing import TYPE_CHECKING, Any, Protocol
 import portalocker
 from dotenv import dotenv_values
 from platformdirs import PlatformDirs
-from rich.console import Console
-from rich.text import Text
-from rich_argparse import RichHelpFormatter
+from termcolor import colored
 from typing_extensions import Self
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-
-    from rich.style import StyleType
 
 
 class Defaults:
@@ -77,18 +73,6 @@ SCHEDULE_RE = " *".join(
 )
 QUEUE_LOCK_WAIT = 0.01
 SMTP_SERVER = "127.0.0.1"
-
-console = Console(highlight=False)
-RICH_ARGPARSE_STYLES: dict[str, StyleType] = {
-    "argparse.args": "green",
-    "argparse.groups": "default",
-    "argparse.help": "default",
-    "argparse.metavar": "green",
-    "argparse.prog": "default",
-    "argparse.syntax": "bold",
-    "argparse.text": "default",
-    "argparse.default": "default",
-}
 
 
 @dataclass(frozen=True)
@@ -379,7 +363,7 @@ def load_jobs(directory: Path, /) -> list[Job]:
 
 
 def list_jobs(config: Config) -> None:
-    console.print("\n".join(job.name for job in load_jobs(config.config_dir)))
+    print("\n".join(job.name for job in load_jobs(config.config_dir)))  # noqa: T201
 
 
 def run_session(config: Config) -> list[JobResult]:
@@ -407,7 +391,7 @@ def show_value(value: Any) -> str:
     return str(value).strip()
 
 
-def show_job(job: Job, config: Config) -> Text:
+def show_job(job: Job, config: Config) -> str:
     d = {k: v for k, v in vars(job).items() if k not in ("env", "name")}
 
     last_run = job.last_run(config.state_dir)
@@ -419,30 +403,23 @@ def show_job(job: Job, config: Config) -> Text:
 
     d[Messages.SHOW_SHOULD_RUN] = job.should_run(config.state_dir)
 
-    text = Text()
-    text.append(f"{job.name}\n", style="bold")
+    lines = [colored(job.name, attrs=["bold"])]
 
     for k, v in d.items():
-        text.append(f"    {k}: {show_value(v)}\n")
+        lines.append(f"    {k}: {show_value(v)}")
 
-    return text
+    return "\n".join(lines)
 
 
 def show_jobs(config: Config) -> None:
     jobs = load_jobs(config.config_dir)
 
-    for i, job in enumerate(jobs):
-        console.print(show_job(job, config), end="")
-        if i < len(jobs) - 1:
-            console.print()
+    print("\n\n".join(show_job(job, config) for job in jobs))  # noqa: T201
 
 
 def cli() -> argparse.Namespace:
-    RichHelpFormatter.group_name_formatter = lambda x: x
-    RichHelpFormatter.styles = RICH_ARGPARSE_STYLES
-
     parser = argparse.ArgumentParser(
-        description="Run jobs on a regular basis.", formatter_class=RichHelpFormatter
+        description="Run jobs on a regular basis.",
     )
     subparsers = parser.add_subparsers(required=True, title="commands")
 
