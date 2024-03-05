@@ -410,11 +410,12 @@ def available_jobs(directory: Path, /) -> list[Path]:
 
 
 def list_jobs(config: Config) -> None:
-    print(  # noqa: T201
-        "\n".join(
+    output = "\n".join(
             Job.job_name(job_dir) for job_dir in available_jobs(config.config_dir)
         )
-    )
+
+    if output:
+        print(output) # noqa: T201
 
 
 def run_session(config: Config) -> list[JobResult]:
@@ -491,7 +492,8 @@ def show_jobs(config: Config) -> None:
                 )
             )
 
-    print("\n\n".join(entries))  # noqa: T201
+    if entries:
+        print("\n\n".join(entries))  # noqa: T201
 
 
 def cli() -> argparse.Namespace:
