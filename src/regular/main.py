@@ -34,7 +34,6 @@ from regular.basis import (
     JobResultSkipped,
     Messages,
     parse_duration,
-    read_text_or_default,
 )
 
 if TYPE_CHECKING:
@@ -103,19 +102,17 @@ def run_job(job: Job, config: Config) -> JobResult:
     lock_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        with portalocker.Lock(
-            config.state_dir / job.name / FileDirNames.RUNNING_LOCK,
-            fail_when_locked=True,
-            mode="a",
+        with (
+            portalocker.Lock(
+                config.state_dir / job.name / FileDirNames.RUNNING_LOCK,
+                fail_when_locked=True,
+                mode="a",
+            ),
+            run_in_queue(
+                config.state_dir / job.queue / FileDirNames.QUEUE_DIR, job.name
+            ),
         ):
-            queue_name = read_text_or_default(
-                job.dir / FileDirNames.QUEUE_NAME, job.name
-            )
-
-            with run_in_queue(
-                config.state_dir / queue_name / FileDirNames.QUEUE_DIR, job.name
-            ):
-                return run_job_no_lock_no_queue(job, config)
+            return run_job_no_lock_no_queue(job, config)
     except portalocker.AlreadyLocked:
         return JobResultLocked(name=job.name)
 

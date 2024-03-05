@@ -213,10 +213,14 @@ class Job:
     filename: str
     jitter: str
     name: str
+    queue: str
     schedule: str
 
     @classmethod
     def load(cls, job_dir: Path, *, name: str = "") -> Self:
+        if not name:
+            name = cls.job_name(job_dir)
+
         env = load_env(job_dir / FileDirNames.ENV, dict(os.environ))
 
         filename = read_text_or_default(
@@ -224,6 +228,8 @@ class Job:
         )
 
         jitter = read_text_or_default(job_dir / FileDirNames.JITTER, Defaults.JITTER)
+
+        queue = read_text_or_default(job_dir / FileDirNames.QUEUE_NAME, name)
 
         schedule = read_text_or_default(
             job_dir / FileDirNames.SCHEDULE, Defaults.SCHEDULE
@@ -234,7 +240,8 @@ class Job:
             env=env,
             filename=filename,
             jitter=jitter,
-            name=name if name else cls.job_name(job_dir),
+            name=name,
+            queue=queue,
             schedule=schedule,
         )
 
