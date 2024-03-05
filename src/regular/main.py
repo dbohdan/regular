@@ -161,9 +161,9 @@ def available_jobs(config_dir: Path, /) -> list[Path]:
 
 def select_jobs(config_dir: Path, /, job_names: list[str] | None = None) -> list[Path]:
     return (
-        available_jobs(config_dir)
-        if job_names is None
-        else [config_dir / job_name for job_name in job_names]
+        [config_dir / job_name for job_name in job_names]
+        if job_names
+        else available_jobs(config_dir)
     )
 
 
