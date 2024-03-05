@@ -41,7 +41,7 @@ termcolor = "^2.4.0"
 
 [tool.poetry.group.dev.dependencies]
 codespell = "^2"
-pyright = "1.1.331"
+pyright = "1.1.352"
 pytest = "^8"
 pytest-cov = "^4.1.0"
 nox = "2023.4.22"
