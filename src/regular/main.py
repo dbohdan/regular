@@ -176,19 +176,31 @@ def cli_command_list(config: Config) -> None:
         print(output)  # noqa: T201
 
 
-def cli_command_log(config: Config, job_name: str) -> None:
-    job_dir = select_jobs(config.config_dir, job_names=[job_name])[0]
-    job = Job.load(job_dir)
+def cli_command_log(config: Config, job_names: list[str] | None = None) -> None:
+    job_dirs = select_jobs(config.config_dir, job_names)
 
-    state_dir = job.state_dir(config.state_dir)
+    output = []
 
-    for filename in (FileDirNames.STDOUT_LOG, FileDirNames.STDERR_LOG):
-        with suppress(FileNotFoundError):
-            output = Messages.LOG_TEMPLATE.format(
-                name=filename, text=(state_dir / filename).read_text()
+    for job_dir in job_dirs:
+        job = Job.load(job_dir)
+
+        state_dir = job.state_dir(config.state_dir)
+
+        logs = {}
+
+        for filename in (FileDirNames.STDOUT_LOG, FileDirNames.STDERR_LOG):
+            with suppress(FileNotFoundError):
+                logs[filename] = (state_dir / filename).read_text()
+
+        output.append(
+            Messages.LOG_TEMPLATE.format(
+                job_name=job.name,
+                stdout=logs.get(FileDirNames.STDOUT_LOG, ""),
+                stderr=logs.get(FileDirNames.STDERR_LOG, ""),
             )
+        )
 
-            print(output)  # noqa: T201
+    print("\n".join(output))  # noqa: T201
 
 
 def run_session(
@@ -211,7 +223,7 @@ def run_session(
 
         return result
 
-    jobs_to_run = select_jobs(config.config_dir, job_names)
+    job_dirs_to_run = select_jobs(config.config_dir, job_names)
 
     max_workers_file = config.config_dir / FileDirNames.MAX_WORKERS
     max_workers = (
@@ -219,7 +231,7 @@ def run_session(
     )
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        return list(executor.map(run_job_with_config, jobs_to_run))
+        return list(executor.map(run_job_with_config, job_dirs_to_run))
 
 
 def show_value(value: Any) -> str:
@@ -285,7 +297,9 @@ def cli() -> argparse.Namespace:
 
     log_parser = subparsers.add_parser("log", help="show last log for job")
     log_parser.set_defaults(subcommand="log")
-    log_parser.add_argument("job", help="job name")
+    log_parser.add_argument(
+        "jobs", metavar="job", nargs="*", help="job for which to show logs"
+    )
 
     run_parser = subparsers.add_parser("run", help="run jobs")
     run_parser.set_defaults(subcommand="run")
@@ -320,7 +334,7 @@ def main() -> None:
     if args.subcommand == "list":
         cli_command_list(config)
     elif args.subcommand == "log":
-        cli_command_log(config, args.job)
+        cli_command_log(config, job_names=args.jobs)
     elif args.subcommand == "run":
         run_session(config, force=args.force, job_names=args.jobs)
     elif args.subcommand == "show":

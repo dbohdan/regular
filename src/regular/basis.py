@@ -137,7 +137,10 @@ class Notifier(Protocol):
 
 
 class Messages:
-    LOG_TEMPLATE = colored("{name}", attrs=["bold"]) + "\n{text}"
+    LOG_TEMPLATE = (
+        colored("{job_name}\n", attrs=["bold"])
+        + "    stdout:\n{stdout}\n    stderr:\n{stderr}"
+    )
     SHOW_ERROR_TEMPLATE = colored("{name}", attrs=["bold"]) + "\n    Error: {message}"
     SHOW_LAST_RUN = "last ran"
     SHOW_LAST_RUN_NEVER = "never"
