@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-import operator
+import os
 import re
 import time
 from dataclasses import dataclass
 from datetime import timedelta
-from functools import reduce
-from os import environ
 from typing import TYPE_CHECKING, Protocol
 
-from dotenv import dotenv_values
 from termcolor import colored
 from typing_extensions import Self
 
@@ -17,11 +14,62 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def load_env(*env_files: Path) -> Env:
-    return reduce(
-        operator.or_,
-        [*(dotenv_values(env_file) for env_file in env_files), environ],
-    )
+def parse_env(env_text: str, /, subst_env: Env | None = None) -> Env:
+    env = {}
+    if not subst_env:
+        subst_env = {}
+
+    def replacement(m: re.Match) -> str:
+        var = m.group(1)
+
+        try:
+            return env[var] if var in env else subst_env[var]
+        except KeyError as e:
+            msg = f"can't substitute env variable: {var!r}"
+            raise KeyError(msg) from e
+
+    for raw_line in env_text.splitlines():
+        line = raw_line.strip()
+
+        if not line or line.startswith("#"):
+            continue
+
+        if "=" in line:
+            k, v = line.split("=", 1)
+            k = k.rstrip()
+            v = v.lstrip()
+
+            subst = True
+
+            if (v.startswith('"') and v.endswith('"')) or (
+                v.startswith("'") and v.endswith("'")
+            ):
+                if v.startswith("'"):
+                    subst = False
+
+                v = v[1:-1]
+
+            if subst:
+                # Replace all instances of `${foo}` with the key `foo` in `env`.
+                v = re.sub(r"\${([^}\0=]+)\}", replacement, v)
+
+            env[k] = v
+
+            continue
+
+        msg = f"can't parse env file line {line!r}"
+        raise ValueError(msg)
+
+    return env
+
+
+def load_env(env_file: Path, subst_env: Env | None = None) -> Env:
+    try:
+        text = env_file.read_text()
+    except OSError:
+        return {}
+
+    return parse_env(text, subst_env)
 
 
 def read_text_or_default(text_file: Path, default: str) -> str:
@@ -152,7 +200,7 @@ class Config:
     ) -> Self:
         return cls(
             config_dir=config_dir,
-            env=load_env(config_dir / FileDirNames.ENV),
+            env=load_env(config_dir / FileDirNames.ENV, dict(os.environ)),
             notifiers=notifiers,
             state_dir=state_dir,
         )
@@ -169,7 +217,7 @@ class Job:
 
     @classmethod
     def load(cls, job_dir: Path, *, name: str = "") -> Self:
-        env = load_env(job_dir / FileDirNames.ENV)
+        env = load_env(job_dir / FileDirNames.ENV, dict(os.environ))
 
         filename = read_text_or_default(
             job_dir / FileDirNames.FILENAME, Defaults.FILENAME

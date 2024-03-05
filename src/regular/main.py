@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import argparse
+import os
 import random
 import subprocess as sp
 import sys
+import textwrap
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
-from os import environ
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -135,7 +136,7 @@ def run_job_no_lock_no_queue(job: Job, config: Config) -> JobResult:
         capture_output=True,
         check=False,
         cwd=job.dir,
-        env=environ | config.env | job.env,
+        env=os.environ | config.env | job.env,
         text=True,
     )
 
@@ -196,11 +197,14 @@ def show_value(value: Any) -> str:
     if not value:
         return Messages.SHOW_NONE
 
-    return str(value).strip()
+    return str(value).rstrip()
 
 
 def show_job(job: Job, config: Config) -> str:
-    d = {k: v for k, v in vars(job).items() if k not in ("env", "name")}
+    d = {k: v for k, v in vars(job).items() if k not in ("name")}
+
+    if d["env"]:
+        d["env"] = "\n" + textwrap.indent((job.dir / "env").read_text(), "        ")
 
     last_run = job.last_run(config.state_dir)
     d[Messages.SHOW_LAST_RUN] = (
@@ -261,8 +265,8 @@ def main() -> None:
 
     dirs = PlatformDirs(APP_NAME, APP_AUTHOR)
 
-    config_dir = Path(environ.get(EnvVars.CONFIG_DIR, dirs.user_config_path))
-    state_dir = Path(environ.get(EnvVars.STATE_DIR, dirs.user_state_path))
+    config_dir = Path(os.environ.get(EnvVars.CONFIG_DIR, dirs.user_config_path))
+    state_dir = Path(os.environ.get(EnvVars.STATE_DIR, dirs.user_state_path))
 
     for directory in (config_dir, state_dir):
         directory.mkdir(parents=True, exist_ok=True)

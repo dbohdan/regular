@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import pytest
 from regular import (
     Config,
     Job,
@@ -16,9 +18,8 @@ from regular import (
     run_job,
     run_session,
 )
-from regular.main import (
-    QUEUE_LOCK_WAIT,
-)
+from regular.basis import load_env, parse_env
+from regular.main import QUEUE_LOCK_WAIT
 
 TEST_DIR = Path(__file__).parent
 
@@ -82,12 +83,17 @@ class TestRegular:
 
     def test_session_env(self, tmp_path) -> None:
         config, _ = config_and_log("env", tmp_path)
+        os_var = "<(***)>"
+        os.environ["OS_VAR"] = os_var
 
         results = run_session(config)
 
         assert results == [
             JobResultCompleted(
                 name="greet", exit_status=0, stdout="Hello, world!\n", stderr=""
+            ),
+            JobResultCompleted(
+                name="os-var", exit_status=0, stdout=f"{os_var}\n", stderr=""
             ),
             JobResultCompleted(
                 name="override",
@@ -226,4 +232,57 @@ class TestRegular:
         assert set(results) == {
             JobResultCompleted(name="wait", exit_status=0, stdout="", stderr=""),
             JobResultLocked(name="wait"),
+        }
+
+    def test_load_env(self) -> None:
+        config, _ = config_and_log("env", TEST_DIR)
+        env_file = config.config_dir / "env"
+
+        env = load_env(env_file)
+
+        assert env == {
+            "PART": "Hello, ",
+            "MESSAGE": "Hello, world!",
+        }
+
+    def test_parse_env_blank(self) -> None:
+        assert parse_env("\n   \t \n\n\n") == {}
+
+    def test_parse_env_comment(self) -> None:
+        assert parse_env("# A=B\n# foo") == {}
+
+    def test_parse_env_simple_var(self) -> None:
+        assert parse_env("A=B\n FOO =\tBAR  ") == {"A": "B", "FOO": "BAR"}
+
+    def test_parse_env_subst(self) -> None:
+        assert parse_env(
+            "H-E-L-L-O=Hello\n\n"
+            "__w0rld__=world\n"
+            "GREETING=${H-E-L-L-O}, ${__w0rld__}"
+        ) == {
+            "H-E-L-L-O": "Hello",
+            "__w0rld__": "world",
+            "GREETING": "Hello, world",
+        }
+
+    def test_parse_env_substsubst_env(self) -> None:
+        assert parse_env("DIR=${HOME}/foo", {"HOME": "/home/user"}) == {
+            "DIR": "/home/user/foo"
+        }
+
+    def test_parse_env_subst_nonexistent(self) -> None:
+        with pytest.raises(KeyError):
+            parse_env("foo=${no-such-var}")
+
+    def test_parse_env_quotes(self) -> None:
+        assert parse_env(
+            'spaces= "   " \n'
+            "tabs\t=\t'\t\t\t'\t\n"
+            'subst="${spaces}${tabs}"\n'
+            "no_subst='${spaces}${tabs}'"
+        ) == {
+            "spaces": "   ",
+            "tabs": "\t\t\t",
+            "subst": "   \t\t\t",
+            "no_subst": "${spaces}${tabs}",
         }
