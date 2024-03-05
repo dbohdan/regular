@@ -155,8 +155,16 @@ def run_job_no_lock_no_queue(
     )
 
 
-def available_jobs(directory: Path, /) -> list[Path]:
-    return [item for item in sorted(directory.iterdir()) if item.is_dir()]
+def available_jobs(config_dir: Path, /) -> list[Path]:
+    return [item for item in sorted(config_dir.iterdir()) if item.is_dir()]
+
+
+def select_jobs(config_dir: Path, /, job_names: list[str] | None = None) -> list[Path]:
+    return (
+        available_jobs(config_dir)
+        if job_names is None
+        else [config_dir / job_name for job_name in job_names]
+    )
 
 
 def list_jobs(config: Config) -> None:
@@ -188,11 +196,7 @@ def run_session(
 
         return result
 
-    jobs_to_run = (
-        available_jobs(config.config_dir)
-        if job_names is None
-        else [config.config_dir / job_name for job_name in job_names]
-    )
+    jobs_to_run = select_jobs(config.config_dir, job_names)
 
     max_workers_file = config.config_dir / FileDirNames.MAX_WORKERS
     max_workers = (
@@ -236,8 +240,8 @@ def show_job(job: Job, config: Config) -> str:
     return "\n".join(lines)
 
 
-def show_jobs(config: Config) -> None:
-    job_dirs = available_jobs(config.config_dir)
+def show_jobs(config: Config, job_names: list[str] | None = None) -> None:
+    job_dirs = select_jobs(config.config_dir, job_names)
 
     entries = []
     for job_dir in job_dirs:
@@ -276,6 +280,7 @@ def cli() -> argparse.Namespace:
 
     show_parser = subparsers.add_parser("show", help="show job information")
     show_parser.set_defaults(subcommand="show")
+    show_parser.add_argument("jobs", metavar="job", nargs="*", help="job to show")
 
     return parser.parse_args()
 
@@ -298,7 +303,7 @@ def main() -> None:
     elif args.subcommand == "run":
         run_session(config, force=args.force, job_names=args.jobs)
     elif args.subcommand == "show":
-        show_jobs(config)
+        show_jobs(config, job_names=args.jobs)
     else:
         msg = "invalid command"
         raise ValueError(msg)
