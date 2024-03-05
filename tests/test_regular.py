@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -10,6 +11,7 @@ from regular import (
     Job,
     JobResult,
     JobResultCompleted,
+    JobResultError,
     JobResultLocked,
     JobResultSkipped,
     run_job,
@@ -93,6 +95,15 @@ class TestRegular:
             ),
         ]
 
+    def test_session_error_notify(self, tmp_path) -> None:
+        config, log = config_and_log("error-notify", tmp_path)
+
+        results = run_session(config)
+
+        assert len(results) == 2
+        assert len(log) == 1
+        assert log[0].name == "missing-script"
+
     def test_session_failure(self, tmp_path) -> None:
         config, _ = config_and_log("failure", tmp_path)
 
@@ -112,6 +123,35 @@ class TestRegular:
         assert results == [
             JobResultCompleted(name="foo", exit_status=0, stdout="run.sh\n", stderr=""),
         ]
+
+    def test_session_invalid_jitter(self, tmp_path) -> None:
+        config, _ = config_and_log("invalid-jitter", tmp_path)
+
+        results = run_session(config)
+
+        assert len(results) == 1
+        assert isinstance(results[0], JobResultError)
+        assert results[0].message == "invalid duration: 'nah'"
+
+    def test_session_invalid_schedule(self, tmp_path) -> None:
+        config, _ = config_and_log("invalid-schedule", tmp_path)
+
+        results = run_session(config)
+
+        assert len(results) == 1
+        assert isinstance(results[0], JobResultError)
+        assert results[0].message == "invalid duration: 'no'"
+
+    def test_session_no_script(self, tmp_path) -> None:
+        config, _ = config_and_log("no-script", tmp_path)
+
+        results = run_session(config)
+
+        assert len(results) == 2
+        for i in range(2):
+            result = results[i]
+            assert isinstance(result, JobResultError)
+            assert re.search(r"No such file or directory", result.message)
 
     def test_session_notify(self, tmp_path) -> None:
         config, log = config_and_log("notify", tmp_path)

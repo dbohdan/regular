@@ -7,7 +7,9 @@ import random
 import re
 import smtplib
 import subprocess as sp
+import sys
 import time
+import traceback
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
@@ -55,20 +57,23 @@ class FileDirNames:
 
 
 class Messages:
+    SHOW_ERROR_TEMPLATE = colored("{name}", attrs=["bold"]) + "\n    error: {message}"
     SHOW_LAST_RUN = "last ran"
     SHOW_LAST_RUN_NEVER = "never"
     SHOW_NONE = "none"
     SHOW_NO = "no"
     SHOW_SHOULD_RUN = "would run now"
     SHOW_YES = "yes"
-    RESULT_TITLE_FAILURE = "Job {name!r} failed with code {exit_status}"
-    RESULT_TITLE_SUCCESS = "Job {name!r} succeeded"
-    RESULT_TEXT = "stderr:\n{stderr}\nstdout:\n{stdout}"
+    RESULT_COMPLETED_TITLE_FAILURE = "Job {name!r} failed with code {exit_status}"
+    RESULT_COMPLETED_TITLE_SUCCESS = "Job {name!r} succeeded"
+    RESULT_COMPLETED_TEXT = "stderr:\n{stderr}\nstdout:\n{stdout}"
+    RESULT_ERROR_TITLE = "Job {name!r} did not run because of an error"
+    RESULT_ERROR_TEXT = "Error message:\n{message}\n\nLog:\n{log}"
 
 
 APP_NAME = "regular"
 APP_AUTHOR = "dbohdan"
-SCHEDULE_RE = " *".join(
+DURATION_RE = " *".join(
     ["", *(rf"(?:(\d+) *({unit}))?" for unit in ("w", "d", "h", "m", "s", "ms")), ""]
 )
 QUEUE_LOCK_WAIT = 0.01
@@ -124,9 +129,13 @@ class Job:
             env=env,
             filename=filename,
             jitter=jitter,
-            name=name if name else job_dir.name,
+            name=name if name else cls.job_name(job_dir),
             schedule=schedule,
         )
+
+    @classmethod
+    def job_name(cls, job_dir: Path) -> str:
+        return job_dir.name
 
     def last_run_file(self, state_dir: Path) -> Path:
         return state_dir / self.name / FileDirNames.LAST_RUN
@@ -137,7 +146,7 @@ class Job:
 
     def should_run(self, state_dir: Path) -> bool:
         last_run = self.last_run(state_dir)
-        min_delay = parse_schedule(self.schedule).total_seconds()
+        min_delay = parse_duration(self.schedule).total_seconds()
 
         return last_run is None or time.time() - last_run >= min_delay
 
@@ -148,15 +157,21 @@ class JobResult:
 
 
 @dataclass(frozen=True)
-class JobResultLocked(JobResult):
-    pass
-
-
-@dataclass(frozen=True)
 class JobResultCompleted(JobResult):
     exit_status: int
     stdout: str
     stderr: str
+
+
+@dataclass(frozen=True)
+class JobResultError(JobResult):
+    message: str
+    log: str = ""
+
+
+@dataclass(frozen=True)
+class JobResultLocked(JobResult):
+    pass
 
 
 @dataclass(frozen=True)
@@ -182,14 +197,14 @@ def read_text_or_default(text_file: Path, default: str) -> str:
     return default
 
 
-def parse_schedule(schedule: str) -> timedelta:
-    if schedule.strip() == "0":
+def parse_duration(duration: str) -> timedelta:
+    if duration.strip() == "0":
         return timedelta()
 
-    m = re.fullmatch(SCHEDULE_RE, schedule)
+    m = re.fullmatch(DURATION_RE, duration)
 
     if not m:
-        msg = f"invalid schedule: {schedule!r}"
+        msg = f"invalid duration: {duration!r}"
         raise ValueError(msg)
 
     weeks, _, days, _, hours, _, minutes, _, seconds, _, milliseconds, _ = m.groups()
@@ -209,36 +224,77 @@ def notify_user(result: JobResult, *, config: Config) -> None:
         notifier(result)
 
 
-def notify_user_by_email(result: JobResult) -> None:
-    if not isinstance(result, JobResultCompleted):
-        return
+def result_message_completed(result: JobResultCompleted) -> tuple[str, str]:
+    title_template = (
+        Messages.RESULT_COMPLETED_TITLE_SUCCESS
+        if result.exit_status == 0
+        else Messages.RESULT_COMPLETED_TITLE_FAILURE
+    )
 
+    title = title_template.format(name=result.name, exit_status=result.exit_status)
+
+    content = Messages.RESULT_COMPLETED_TEXT.format(
+        name=result.name,
+        exit_status=result.exit_status,
+        stdout=result.stdout,
+        stderr=result.stderr,
+    )
+
+    return (title, content)
+
+
+def result_message_error(result: JobResultError) -> tuple[str, str]:
+    title = Messages.RESULT_ERROR_TITLE.format(
+        name=result.name,
+    )
+
+    text = Messages.RESULT_ERROR_TEXT.format(
+        name=result.name,
+        log=result.log,
+        message=result.message,
+    )
+
+    return (title, text)
+
+
+def email_message(subject: str, text: str) -> EmailMessage:
     msg = EmailMessage()
 
-    subj_template = (
-        Messages.RESULT_TITLE_SUCCESS
-        if result.exit_status == 0
-        else Messages.RESULT_TITLE_FAILURE
-    )
-
-    msg["Subject"] = subj_template.format(
-        name=result.name, exit_status=result.exit_status
-    )
+    msg["Subject"] = subject
     msg["From"] = APP_NAME
     msg["To"] = getpass.getuser()
 
-    msg.set_content(
-        Messages.RESULT_TEXT.format(
-            name=result.name,
-            exit_status=result.exit_status,
-            stdout=result.stdout,
-            stderr=result.stderr,
-        )
-    )
+    msg.set_content(text)
 
+    return msg
+
+
+def notify_user_by_email(result: JobResult) -> None:
+    if isinstance(result, JobResultCompleted):
+        title, text = result_message_completed(result)
+    if isinstance(result, JobResultError):
+        title, text = result_message_error(result)
+    else:
+        return
+
+    msg = email_message(title, text)
     smtp = smtplib.SMTP(SMTP_SERVER)
     smtp.send_message(msg)
     smtp.quit()
+
+
+def notify_user_if_necessary(
+    job_dir: Path, *, config: Config, result: JobResult
+) -> None:
+    if not (job_dir / FileDirNames.NEVER_NOTIFY).exists() and (
+        (isinstance(result, JobResultCompleted) and result.exit_status != 0)
+        or isinstance(result, JobResultError)
+        or (job_dir / FileDirNames.ALWAYS_NOTIFY).exists()
+    ):
+        notify_user(
+            result,
+            config=config,
+        )
 
 
 @contextmanager
@@ -324,7 +380,7 @@ def run_job_no_lock_no_queue(job: Job, config: Config) -> JobResult:
     if not job.should_run(config.state_dir):
         return JobResultSkipped(name=job.name)
 
-    jitter_seconds = parse_schedule(job.jitter).total_seconds()
+    jitter_seconds = parse_duration(job.jitter).total_seconds()
     time.sleep(random.random() * jitter_seconds)  # noqa: S311
 
     last_run_file = job.last_run_file(config.state_dir)
@@ -340,37 +396,43 @@ def run_job_no_lock_no_queue(job: Job, config: Config) -> JobResult:
         text=True,
     )
 
-    result = JobResultCompleted(
+    return JobResultCompleted(
         name=job.name,
         exit_status=completed.returncode,
         stdout=completed.stdout,
         stderr=completed.stderr,
     )
 
-    if not (job.dir / FileDirNames.NEVER_NOTIFY).exists() and (
-        completed.returncode != 0 or (job.dir / FileDirNames.ALWAYS_NOTIFY).exists()
-    ):
-        notify_user(
-            result,
-            config=config,
-        )
 
-    return result
-
-
-def load_jobs(directory: Path, /) -> list[Job]:
-    return [Job.load(item) for item in sorted(directory.iterdir()) if item.is_dir()]
+def available_jobs(directory: Path, /) -> list[Path]:
+    return [item for item in sorted(directory.iterdir()) if item.is_dir()]
 
 
 def list_jobs(config: Config) -> None:
-    print("\n".join(job.name for job in load_jobs(config.config_dir)))  # noqa: T201
+    print(  # noqa: T201
+        "\n".join(
+            Job.job_name(job_dir) for job_dir in available_jobs(config.config_dir)
+        )
+    )
 
 
 def run_session(config: Config) -> list[JobResult]:
-    def run_job_with_config(job: Job):
-        return run_job(job, config)
+    def run_job_with_config(job_dir: Path) -> JobResult:
+        try:
+            job = Job.load(job_dir)
+            result = run_job(job, config)
+        except Exception as e:  # noqa: BLE001
+            tb = sys.exc_info()[-1]
+            extracted = traceback.extract_tb(tb)
+            result = JobResultError(
+                name=Job.job_name(job_dir),
+                message=str(e),
+                log="\n".join(traceback.format_list(extracted)),
+            )
 
-    jobs = load_jobs(config.config_dir)
+        notify_user_if_necessary(job_dir, config=config, result=result)
+
+        return result
 
     max_workers_file = config.config_dir / FileDirNames.MAX_WORKERS
     max_workers = (
@@ -378,7 +440,9 @@ def run_session(config: Config) -> list[JobResult]:
     )
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        return list(executor.map(run_job_with_config, jobs))
+        return list(
+            executor.map(run_job_with_config, available_jobs(config.config_dir))
+        )
 
 
 def show_value(value: Any) -> str:
@@ -412,9 +476,21 @@ def show_job(job: Job, config: Config) -> str:
 
 
 def show_jobs(config: Config) -> None:
-    jobs = load_jobs(config.config_dir)
+    job_dirs = available_jobs(config.config_dir)
 
-    print("\n\n".join(show_job(job, config) for job in jobs))  # noqa: T201
+    entries = []
+    for job_dir in job_dirs:
+        try:
+            job = Job.load(job_dir)
+            entries.append(show_job(job, config))
+        except Exception as e:  # noqa: BLE001, PERF203
+            entries.append(
+                Messages.SHOW_ERROR_TEMPLATE.format(
+                    name=Job.job_name(job_dir), message=e
+                )
+            )
+
+    print("\n\n".join(entries))  # noqa: T201
 
 
 def cli() -> argparse.Namespace:
