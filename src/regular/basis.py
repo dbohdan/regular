@@ -171,6 +171,8 @@ class FileDirNames:
     LAST_RUN = "last"
     MAX_WORKERS = "max-workers"
     NEVER_NOTIFY = "never-notify"
+    STDOUT_LOG = "stdout.log"
+    STDERR_LOG = "stderr.log"
     QUEUE_DIR = "queue"
     QUEUE_NAME = "queue"
     QUEUE_TEMPLATE = "{time}-{name}"

@@ -128,20 +128,24 @@ def run_job_no_lock_no_queue(job: Job, config: Config) -> JobResult:
     last_run_file.parent.mkdir(parents=True, exist_ok=True)
     last_run_file.touch()
 
-    completed = sp.run(
-        [job.dir / job.filename],
-        capture_output=True,
-        check=False,
-        cwd=job.dir,
-        env=os.environ | config.env | job.env,
-        text=True,
-    )
+    stdout_log = config.state_dir / job.name / FileDirNames.STDOUT_LOG
+    stderr_log = config.state_dir / job.name / FileDirNames.STDERR_LOG
+
+    with stdout_log.open("w") as f_out, stderr_log.open("w") as f_err:
+        completed = sp.run(
+            [job.dir / job.filename],
+            check=False,
+            cwd=job.dir,
+            env=os.environ | config.env | job.env,
+            stdout=f_out,
+            stderr=f_err,
+        )
 
     return JobResultCompleted(
         name=job.name,
         exit_status=completed.returncode,
-        stdout=completed.stdout,
-        stderr=completed.stderr,
+        stdout=stdout_log.read_text(),
+        stderr=stderr_log.read_text(),
     )
 
 
