@@ -118,6 +118,10 @@ def run_job(job: Job, config: Config) -> JobResult:
 
 
 def run_job_no_lock_no_queue(job: Job, config: Config) -> JobResult:
+    if not job.dir.exists():
+        msg = f"no job directory: {str(job.dir)!r}"
+        raise FileNotFoundError(msg)
+
     if not job.should_run(config.state_dir):
         return JobResultSkipped(name=job.name)
 
@@ -162,7 +166,7 @@ def list_jobs(config: Config) -> None:
         print(output)  # noqa: T201
 
 
-def run_session(config: Config) -> list[JobResult]:
+def run_session(config: Config, job_names: list[str] | None = None) -> list[JobResult]:
     def run_job_with_config(job_dir: Path) -> JobResult:
         try:
             job = Job.load(job_dir)
@@ -180,15 +184,19 @@ def run_session(config: Config) -> list[JobResult]:
 
         return result
 
+    jobs_to_run = (
+        available_jobs(config.config_dir)
+        if job_names is None
+        else [config.config_dir / job_name for job_name in job_names]
+    )
+
     max_workers_file = config.config_dir / FileDirNames.MAX_WORKERS
     max_workers = (
         int(max_workers_file.read_text().strip()) if max_workers_file.exists() else None
     )
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        return list(
-            executor.map(run_job_with_config, available_jobs(config.config_dir))
-        )
+        return list(executor.map(run_job_with_config, jobs_to_run))
 
 
 def show_value(value: Any) -> str:
@@ -254,6 +262,7 @@ def cli() -> argparse.Namespace:
 
     run_parser = subparsers.add_parser("run", help="run jobs")
     run_parser.set_defaults(subcommand="run")
+    run_parser.add_argument("jobs", metavar="job", nargs="*", help="job to run")
 
     show_parser = subparsers.add_parser("show", help="show job information")
     show_parser.set_defaults(subcommand="show")
@@ -277,7 +286,7 @@ def main() -> None:
     if args.subcommand == "list":
         list_jobs(config)
     elif args.subcommand == "run":
-        run_session(config)
+        run_session(config, job_names=args.jobs)
     elif args.subcommand == "show":
         show_jobs(config)
     else:
