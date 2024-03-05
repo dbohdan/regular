@@ -98,18 +98,18 @@ def run_in_queue(queue_dir: Path, /, name: str) -> Iterator[None]:
 
 
 def run_job(job: Job, config: Config) -> JobResult:
-    lock_path = config.state_dir / job.name / FileDirNames.RUNNING_LOCK
+    lock_path = job.state_dir(config.state_dir) / FileDirNames.RUNNING_LOCK
     lock_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
         with (
             portalocker.Lock(
-                config.state_dir / job.name / FileDirNames.RUNNING_LOCK,
+                job.state_dir(config.state_dir) / FileDirNames.RUNNING_LOCK,
                 fail_when_locked=True,
                 mode="a",
             ),
             run_in_queue(
-                config.state_dir / job.queue / FileDirNames.QUEUE_DIR, job.name
+                job.queue_dir(config.state_dir) / FileDirNames.QUEUE_DIR, job.name
             ),
         ):
             return run_job_no_lock_no_queue(job, config)
@@ -128,8 +128,8 @@ def run_job_no_lock_no_queue(job: Job, config: Config) -> JobResult:
     last_run_file.parent.mkdir(parents=True, exist_ok=True)
     last_run_file.touch()
 
-    stdout_log = config.state_dir / job.name / FileDirNames.STDOUT_LOG
-    stderr_log = config.state_dir / job.name / FileDirNames.STDERR_LOG
+    stdout_log = job.state_dir(config.state_dir) / FileDirNames.STDOUT_LOG
+    stderr_log = job.state_dir(config.state_dir) / FileDirNames.STDERR_LOG
 
     with stdout_log.open("w") as f_out, stderr_log.open("w") as f_err:
         completed = sp.run(

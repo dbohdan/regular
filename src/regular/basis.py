@@ -251,8 +251,14 @@ class Job:
     def job_name(cls, job_dir: Path) -> str:
         return job_dir.name
 
+    def queue_dir(self, state_dir: Path) -> Path:
+        return state_dir / self.queue
+
+    def state_dir(self, state_dir: Path) -> Path:
+        return state_dir / self.name
+
     def last_run_file(self, state_dir: Path) -> Path:
-        return state_dir / self.name / FileDirNames.LAST_RUN
+        return self.state_dir(state_dir) / FileDirNames.LAST_RUN
 
     def last_run(self, state_dir: Path) -> float | None:
         last_run_file = self.last_run_file(state_dir)
