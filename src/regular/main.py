@@ -57,7 +57,7 @@ class FileDirNames:
 
 
 class Messages:
-    SHOW_ERROR_TEMPLATE = colored("{name}", attrs=["bold"]) + "\n    error: {message}"
+    SHOW_ERROR_TEMPLATE = colored("{name}", attrs=["bold"]) + "\n    Error: {message}"
     SHOW_LAST_RUN = "last ran"
     SHOW_LAST_RUN_NEVER = "never"
     SHOW_NEVER = "never"
@@ -472,7 +472,7 @@ def show_job(job: Job, config: Config) -> str:
     lines = [colored(job.name, attrs=["bold"])]
 
     for k, v in d.items():
-        lines.append(f"    {k}: {show_value(v)}")
+        lines.append(f"    {k.capitalize()}: {show_value(v)}")
 
     return "\n".join(lines)
 
