@@ -522,6 +522,9 @@ def main() -> None:
     config_dir = Path(environ.get(EnvVars.CONFIG_DIR, dirs.user_config_path))
     state_dir = Path(environ.get(EnvVars.STATE_DIR, dirs.user_state_path))
 
+    for directory in (config_dir, state_dir):
+        directory.mkdir(parents=True, exist_ok=True)
+
     config = Config.load_env(config_dir, [notify_user_by_email], state_dir)
 
     if args.subcommand == "list":
