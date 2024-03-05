@@ -167,13 +167,28 @@ def select_jobs(config_dir: Path, /, job_names: list[str] | None = None) -> list
     )
 
 
-def list_jobs(config: Config) -> None:
+def cli_command_list(config: Config) -> None:
     output = "\n".join(
         Job.job_name(job_dir) for job_dir in available_jobs(config.config_dir)
     )
 
     if output:
         print(output)  # noqa: T201
+
+
+def cli_command_log(config: Config, job_name: str) -> None:
+    job_dir = select_jobs(config.config_dir, job_names=[job_name])[0]
+    job = Job.load(job_dir)
+
+    state_dir = job.state_dir(config.state_dir)
+
+    for filename in (FileDirNames.STDOUT_LOG, FileDirNames.STDERR_LOG):
+        with suppress(FileNotFoundError):
+            output = Messages.LOG_TEMPLATE.format(
+                name=filename, text=(state_dir / filename).read_text()
+            )
+
+            print(output)  # noqa: T201
 
 
 def run_session(
@@ -240,7 +255,7 @@ def show_job(job: Job, config: Config) -> str:
     return "\n".join(lines)
 
 
-def show_jobs(config: Config, job_names: list[str] | None = None) -> None:
+def cli_command_show(config: Config, job_names: list[str] | None = None) -> None:
     job_dirs = select_jobs(config.config_dir, job_names)
 
     entries = []
@@ -267,6 +282,10 @@ def cli() -> argparse.Namespace:
 
     list_parser = subparsers.add_parser("list", help="list jobs")
     list_parser.set_defaults(subcommand="list")
+
+    log_parser = subparsers.add_parser("log", help="show last log for job")
+    log_parser.set_defaults(subcommand="log")
+    log_parser.add_argument("job", help="job name")
 
     run_parser = subparsers.add_parser("run", help="run jobs")
     run_parser.set_defaults(subcommand="run")
@@ -299,11 +318,13 @@ def main() -> None:
     config = Config.load_env(config_dir, [notify.notify_user_by_email], state_dir)
 
     if args.subcommand == "list":
-        list_jobs(config)
+        cli_command_list(config)
+    elif args.subcommand == "log":
+        cli_command_log(config, args.job)
     elif args.subcommand == "run":
         run_session(config, force=args.force, job_names=args.jobs)
     elif args.subcommand == "show":
-        show_jobs(config, job_names=args.jobs)
+        cli_command_show(config, job_names=args.jobs)
     else:
         msg = "invalid command"
         raise ValueError(msg)
