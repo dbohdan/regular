@@ -60,6 +60,7 @@ class Messages:
     SHOW_ERROR_TEMPLATE = colored("{name}", attrs=["bold"]) + "\n    error: {message}"
     SHOW_LAST_RUN = "last ran"
     SHOW_LAST_RUN_NEVER = "never"
+    SHOW_NEVER = "never"
     SHOW_NONE = "none"
     SHOW_NO = "no"
     SHOW_SHOULD_RUN = "would run now"
@@ -462,7 +463,7 @@ def show_job(job: Job, config: Config) -> str:
     d[Messages.SHOW_LAST_RUN] = (
         datetime.fromtimestamp(last_run, tz=timezone.utc).astimezone()
         if last_run
-        else last_run
+        else Messages.SHOW_NEVER
     )
 
     d[Messages.SHOW_SHOULD_RUN] = job.should_run(config.state_dir)
