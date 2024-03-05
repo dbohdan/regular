@@ -6,7 +6,6 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from regular import (
-    QUEUE_LOCK_WAIT,
     Config,
     Job,
     JobResult,
@@ -16,6 +15,9 @@ from regular import (
     JobResultSkipped,
     run_job,
     run_session,
+)
+from regular.main import (
+    QUEUE_LOCK_WAIT,
 )
 
 TEST_DIR = Path(__file__).parent

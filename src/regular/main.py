@@ -1,301 +1,43 @@
 from __future__ import annotations
 
 import argparse
-import getpass
-import operator
 import random
-import re
-import smtplib
 import subprocess as sp
 import sys
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from email.message import EmailMessage
-from functools import reduce
+from datetime import datetime, timezone
 from os import environ
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any
 
 import portalocker
-from dotenv import dotenv_values
 from platformdirs import PlatformDirs
 from termcolor import colored
-from typing_extensions import Self
+
+from regular import notify
+from regular.basis import (
+    APP_AUTHOR,
+    APP_NAME,
+    QUEUE_LOCK_WAIT,
+    Config,
+    EnvVars,
+    FileDirNames,
+    Job,
+    JobResult,
+    JobResultCompleted,
+    JobResultError,
+    JobResultLocked,
+    JobResultSkipped,
+    Messages,
+    parse_duration,
+    read_text_or_default,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-
-
-class Defaults:
-    FILENAME = "script"
-    JITTER = ""
-    SCHEDULE = "1d"
-
-
-class EnvVars:
-    CONFIG_DIR = "REGULAR_CONFIG_DIR"
-    STATE_DIR = "REGULAR_STATE_DIR"
-
-
-class FileDirNames:
-    ALWAYS_NOTIFY = "always-notify"
-    ENV = "env"
-    FILENAME = "filename"
-    JITTER = "jitter"
-    LAST_RUN = "last"
-    MAX_WORKERS = "max-workers"
-    NEVER_NOTIFY = "never-notify"
-    QUEUE_DIR = "queue"
-    QUEUE_NAME = "queue"
-    QUEUE_TEMPLATE = "{time}-{name}"
-    RUNNING_LOCK = "lock"
-    SCHEDULE = "schedule"
-
-
-class Messages:
-    SHOW_ERROR_TEMPLATE = colored("{name}", attrs=["bold"]) + "\n    Error: {message}"
-    SHOW_LAST_RUN = "last ran"
-    SHOW_LAST_RUN_NEVER = "never"
-    SHOW_NEVER = "never"
-    SHOW_NONE = "none"
-    SHOW_NO = "no"
-    SHOW_SHOULD_RUN = "would run now"
-    SHOW_YES = "yes"
-    RESULT_COMPLETED_TITLE_FAILURE = "Job {name!r} failed with code {exit_status}"
-    RESULT_COMPLETED_TITLE_SUCCESS = "Job {name!r} succeeded"
-    RESULT_COMPLETED_TEXT = "stderr:\n{stderr}\nstdout:\n{stdout}"
-    RESULT_ERROR_TITLE = "Job {name!r} did not run because of an error"
-    RESULT_ERROR_TEXT = "Error message:\n{message}\n\nLog:\n{log}"
-
-
-APP_NAME = "regular"
-APP_AUTHOR = "dbohdan"
-DURATION_RE = " *".join(
-    ["", *(rf"(?:(\d+) *({unit}))?" for unit in ("w", "d", "h", "m", "s", "ms")), ""]
-)
-QUEUE_LOCK_WAIT = 0.01
-SMTP_SERVER = "127.0.0.1"
-
-
-@dataclass(frozen=True)
-class Config:
-    config_dir: Path
-    env: Env
-    notifiers: list[Notifier]
-    state_dir: Path
-
-    @classmethod
-    def load_env(
-        cls, config_dir: Path, notifiers: list[Notifier], state_dir: Path
-    ) -> Self:
-        return cls(
-            config_dir=config_dir,
-            env=load_env(config_dir / FileDirNames.ENV),
-            notifiers=notifiers,
-            state_dir=state_dir,
-        )
-
-
-Env = dict[str, str]
-
-
-@dataclass(frozen=True)
-class Job:
-    dir: Path
-    env: Env
-    filename: str
-    jitter: str
-    name: str
-    schedule: str
-
-    @classmethod
-    def load(cls, job_dir: Path, *, name: str = "") -> Self:
-        env = load_env(job_dir / FileDirNames.ENV)
-
-        filename = read_text_or_default(
-            job_dir / FileDirNames.FILENAME, Defaults.FILENAME
-        )
-        jitter = read_text_or_default(job_dir / FileDirNames.JITTER, Defaults.JITTER)
-
-        schedule = read_text_or_default(
-            job_dir / FileDirNames.SCHEDULE, Defaults.SCHEDULE
-        )
-
-        return cls(
-            dir=job_dir,
-            env=env,
-            filename=filename,
-            jitter=jitter,
-            name=name if name else cls.job_name(job_dir),
-            schedule=schedule,
-        )
-
-    @classmethod
-    def job_name(cls, job_dir: Path) -> str:
-        return job_dir.name
-
-    def last_run_file(self, state_dir: Path) -> Path:
-        return state_dir / self.name / FileDirNames.LAST_RUN
-
-    def last_run(self, state_dir: Path) -> float | None:
-        last_run_file = self.last_run_file(state_dir)
-        return last_run_file.stat().st_mtime if last_run_file.exists() else None
-
-    def should_run(self, state_dir: Path) -> bool:
-        last_run = self.last_run(state_dir)
-        min_delay = parse_duration(self.schedule).total_seconds()
-
-        return last_run is None or time.time() - last_run >= min_delay
-
-
-@dataclass(frozen=True)
-class JobResult:
-    name: str
-
-
-@dataclass(frozen=True)
-class JobResultCompleted(JobResult):
-    exit_status: int
-    stdout: str
-    stderr: str
-
-
-@dataclass(frozen=True)
-class JobResultError(JobResult):
-    message: str
-    log: str = ""
-
-
-@dataclass(frozen=True)
-class JobResultLocked(JobResult):
-    pass
-
-
-@dataclass(frozen=True)
-class JobResultSkipped(JobResult):
-    pass
-
-
-class Notifier(Protocol):
-    def __call__(self, result: JobResult) -> None: ...
-
-
-def load_env(*env_files: Path) -> Env:
-    return reduce(
-        operator.or_,
-        [*(dotenv_values(env_file) for env_file in env_files), environ],
-    )
-
-
-def read_text_or_default(text_file: Path, default: str) -> str:
-    if text_file.exists():
-        return text_file.read_text().rstrip()
-
-    return default
-
-
-def parse_duration(duration: str) -> timedelta:
-    if duration.strip() == "0":
-        return timedelta()
-
-    m = re.fullmatch(DURATION_RE, duration)
-
-    if not m:
-        msg = f"invalid duration: {duration!r}"
-        raise ValueError(msg)
-
-    weeks, _, days, _, hours, _, minutes, _, seconds, _, milliseconds, _ = m.groups()
-
-    return timedelta(
-        weeks=int(weeks or "0"),
-        days=int(days or "0"),
-        hours=int(hours or "0"),
-        minutes=int(minutes or "0"),
-        seconds=int(seconds or "0"),
-        milliseconds=int(milliseconds or "0"),
-    )
-
-
-def notify_user(result: JobResult, *, config: Config) -> None:
-    for notifier in config.notifiers:
-        notifier(result)
-
-
-def result_message_completed(result: JobResultCompleted) -> tuple[str, str]:
-    title_template = (
-        Messages.RESULT_COMPLETED_TITLE_SUCCESS
-        if result.exit_status == 0
-        else Messages.RESULT_COMPLETED_TITLE_FAILURE
-    )
-
-    title = title_template.format(name=result.name, exit_status=result.exit_status)
-
-    content = Messages.RESULT_COMPLETED_TEXT.format(
-        name=result.name,
-        exit_status=result.exit_status,
-        stdout=result.stdout,
-        stderr=result.stderr,
-    )
-
-    return (title, content)
-
-
-def result_message_error(result: JobResultError) -> tuple[str, str]:
-    title = Messages.RESULT_ERROR_TITLE.format(
-        name=result.name,
-    )
-
-    text = Messages.RESULT_ERROR_TEXT.format(
-        name=result.name,
-        log=result.log,
-        message=result.message,
-    )
-
-    return (title, text)
-
-
-def email_message(subject: str, text: str) -> EmailMessage:
-    msg = EmailMessage()
-
-    msg["Subject"] = subject
-    msg["From"] = APP_NAME
-    msg["To"] = getpass.getuser()
-
-    msg.set_content(text)
-
-    return msg
-
-
-def notify_user_by_email(result: JobResult) -> None:
-    if isinstance(result, JobResultCompleted):
-        title, text = result_message_completed(result)
-    if isinstance(result, JobResultError):
-        title, text = result_message_error(result)
-    else:
-        return
-
-    msg = email_message(title, text)
-    smtp = smtplib.SMTP(SMTP_SERVER)
-    smtp.send_message(msg)
-    smtp.quit()
-
-
-def notify_user_if_necessary(
-    job_dir: Path, *, config: Config, result: JobResult
-) -> None:
-    if not (job_dir / FileDirNames.NEVER_NOTIFY).exists() and (
-        (isinstance(result, JobResultCompleted) and result.exit_status != 0)
-        or isinstance(result, JobResultError)
-        or (job_dir / FileDirNames.ALWAYS_NOTIFY).exists()
-    ):
-        notify_user(
-            result,
-            config=config,
-        )
 
 
 @contextmanager
@@ -411,11 +153,11 @@ def available_jobs(directory: Path, /) -> list[Path]:
 
 def list_jobs(config: Config) -> None:
     output = "\n".join(
-            Job.job_name(job_dir) for job_dir in available_jobs(config.config_dir)
-        )
+        Job.job_name(job_dir) for job_dir in available_jobs(config.config_dir)
+    )
 
     if output:
-        print(output) # noqa: T201
+        print(output)  # noqa: T201
 
 
 def run_session(config: Config) -> list[JobResult]:
@@ -432,7 +174,7 @@ def run_session(config: Config) -> list[JobResult]:
                 log="\n".join(traceback.format_list(extracted)),
             )
 
-        notify_user_if_necessary(job_dir, config=config, result=result)
+        notify.notify_user_if_necessary(job_dir, config=config, result=result)
 
         return result
 
@@ -525,7 +267,7 @@ def main() -> None:
     for directory in (config_dir, state_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
-    config = Config.load_env(config_dir, [notify_user_by_email], state_dir)
+    config = Config.load_env(config_dir, [notify.notify_user_by_email], state_dir)
 
     if args.subcommand == "list":
         list_jobs(config)
