@@ -97,7 +97,7 @@ def run_in_queue(queue_dir: Path, /, name: str) -> Iterator[None]:
                 my_lock_file.unlink()
 
 
-def run_job(job: Job, config: Config) -> JobResult:
+def run_job(job: Job, config: Config, *, force: bool = False) -> JobResult:
     lock_path = job.state_dir(config.state_dir) / FileDirNames.RUNNING_LOCK
     lock_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -112,17 +112,19 @@ def run_job(job: Job, config: Config) -> JobResult:
                 job.queue_dir(config.state_dir) / FileDirNames.QUEUE_DIR, job.name
             ),
         ):
-            return run_job_no_lock_no_queue(job, config)
+            return run_job_no_lock_no_queue(job, config, force=force)
     except portalocker.AlreadyLocked:
         return JobResultLocked(name=job.name)
 
 
-def run_job_no_lock_no_queue(job: Job, config: Config) -> JobResult:
+def run_job_no_lock_no_queue(
+    job: Job, config: Config, *, force: bool = False
+) -> JobResult:
     if not job.dir.exists():
         msg = f"no job directory: {str(job.dir)!r}"
         raise FileNotFoundError(msg)
 
-    if not job.should_run(config.state_dir):
+    if not force and not job.should_run(config.state_dir):
         return JobResultSkipped(name=job.name)
 
     jitter_seconds = parse_duration(job.jitter).total_seconds()
@@ -166,11 +168,13 @@ def list_jobs(config: Config) -> None:
         print(output)  # noqa: T201
 
 
-def run_session(config: Config, job_names: list[str] | None = None) -> list[JobResult]:
+def run_session(
+    config: Config, *, force: bool = False, job_names: list[str] | None = None
+) -> list[JobResult]:
     def run_job_with_config(job_dir: Path) -> JobResult:
         try:
             job = Job.load(job_dir)
-            result = run_job(job, config)
+            result = run_job(job, config, force=force)
         except Exception as e:  # noqa: BLE001
             tb = sys.exc_info()[-1]
             extracted = traceback.extract_tb(tb)
@@ -263,6 +267,12 @@ def cli() -> argparse.Namespace:
     run_parser = subparsers.add_parser("run", help="run jobs")
     run_parser.set_defaults(subcommand="run")
     run_parser.add_argument("jobs", metavar="job", nargs="*", help="job to run")
+    run_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="run jobs regardless of when they last ran",
+    )
 
     show_parser = subparsers.add_parser("show", help="show job information")
     show_parser.set_defaults(subcommand="show")
@@ -286,7 +296,7 @@ def main() -> None:
     if args.subcommand == "list":
         list_jobs(config)
     elif args.subcommand == "run":
-        run_session(config, job_names=args.jobs)
+        run_session(config, force=args.force, job_names=args.jobs)
     elif args.subcommand == "show":
         show_jobs(config)
     else:

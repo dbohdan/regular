@@ -64,6 +64,14 @@ class TestRegular:
             JobResultSkipped(name="foo"),
         ]
 
+    def test_session_basic_force(self, tmp_path) -> None:
+        config, _ = config_and_log("basic", tmp_path)
+
+        results1 = run_session(config)
+        results2 = run_session(config, force=True)
+
+        assert results1 == results2
+
     def test_session_cwd(self, tmp_path) -> None:
         config, _ = config_and_log("cwd", tmp_path)
 
