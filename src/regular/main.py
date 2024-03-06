@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import random
 import subprocess as sp
@@ -16,7 +17,6 @@ from typing import TYPE_CHECKING, Any
 
 import portalocker
 from platformdirs import PlatformDirs
-from termcolor import colored
 
 from regular import notify
 from regular.basis import (
@@ -33,6 +33,7 @@ from regular.basis import (
     JobResultLocked,
     JobResultSkipped,
     Messages,
+    load_env,
     parse_duration,
 )
 
@@ -167,40 +168,43 @@ def select_jobs(config_dir: Path, /, job_names: list[str] | None = None) -> list
     )
 
 
-def cli_command_list(config: Config) -> None:
-    output = "\n".join(
-        Job.job_name(job_dir) for job_dir in available_jobs(config.config_dir)
-    )
-
-    if output:
-        print(output)  # noqa: T201
+def jsonize(data: Any) -> str:
+    return json.dumps(data, ensure_ascii=False)
 
 
-def cli_command_log(config: Config, job_names: list[str] | None = None) -> None:
+def cli_command_list(config: Config, *, json_lines: bool = False) -> None:
+    for job_dir in available_jobs(config.config_dir):
+        name = Job.job_name(job_dir)
+        print(jsonize(name) if json_lines else name)  # noqa: T201
+
+
+def cli_command_log(
+    config: Config, *, json_lines: bool = False, job_names: list[str] | None = None
+) -> None:
     job_dirs = select_jobs(config.config_dir, job_names)
-
-    output = []
 
     for job_dir in job_dirs:
         job = Job.load(job_dir)
-
         state_dir = job.state_dir(config.state_dir)
 
-        logs = {}
+        record = {"name": job.name}
 
         for filename in (FileDirNames.STDOUT_LOG, FileDirNames.STDERR_LOG):
+            record[filename] = ""
             with suppress(FileNotFoundError):
-                logs[filename] = (state_dir / filename).read_text()
+                record[filename] = (state_dir / filename).read_text()
 
-        output.append(
-            Messages.LOG_TEMPLATE.format(
-                job_name=job.name,
-                stdout=logs.get(FileDirNames.STDOUT_LOG, ""),
-                stderr=logs.get(FileDirNames.STDERR_LOG, ""),
+        print(  # noqa: T201
+            jsonize(record)
+            if json_lines
+            else (
+                Messages.LOG_TEMPLATE.format(
+                    name=record["name"],
+                    stdout=record[FileDirNames.STDOUT_LOG],
+                    stderr=record[FileDirNames.STDERR_LOG],
+                )
             )
         )
-
-    print("\n".join(output))  # noqa: T201
 
 
 def run_session(
@@ -244,46 +248,66 @@ def show_value(value: Any) -> str:
     return str(value).rstrip()
 
 
-def show_job(job: Job, config: Config) -> str:
-    d = {k: v for k, v in vars(job).items() if k not in ("name")}
+def show_job(job: Job, config: Config, *, json: bool = False) -> str:
+    record = dict(vars(job))
 
-    if d["env"]:
-        d["env"] = "\n" + textwrap.indent((job.dir / "env").read_text(), "        ")
+    if record["env"]:
+        record["env"] = (
+            load_env(job.dir / "env", subst=False)
+            if json
+            else "\n" + textwrap.indent((job.dir / "env").read_text(), "        ")
+        )
+
+    if not json:
+        del record["name"]
 
     last_run = job.last_run(config.state_dir)
-    d[Messages.SHOW_LAST_RUN] = (
+
+    record[Messages.SHOW_LAST_RUN] = (
         datetime.fromtimestamp(last_run, tz=timezone.utc).astimezone()
         if last_run
         else Messages.SHOW_NEVER
     )
 
-    d[Messages.SHOW_SHOULD_RUN] = job.should_run(config.state_dir)
+    record[Messages.SHOW_SHOULD_RUN] = job.should_run(config.state_dir)
 
-    lines = [colored(job.name, attrs=["bold"])]
+    if json:
+        return jsonize(
+            {
+                k.replace(" ", "_"): str(v) if isinstance(v, (datetime, Path)) else v
+                for k, v in record.items()
+            }
+        )
 
-    for k, v in d.items():
-        lines.append(f"    {k.capitalize()}: {show_value(v)}")
+    lines = [Messages.SHOW_JOB_TITLE_TEMPLATE.format(name=job.name)]
+
+    for k, v in record.items():
+        lines.append(f"    {k}: {show_value(v)}")
 
     return "\n".join(lines)
 
 
-def cli_command_show(config: Config, job_names: list[str] | None = None) -> None:
+def cli_command_show(
+    config: Config, *, json_lines: bool = False, job_names: list[str] | None = None
+) -> None:
     job_dirs = select_jobs(config.config_dir, job_names)
 
     entries = []
     for job_dir in job_dirs:
         try:
             job = Job.load(job_dir)
-            entries.append(show_job(job, config))
+            entries.append(show_job(job, config, json=json_lines))
         except Exception as e:  # noqa: BLE001, PERF203
+            error_info = {"name": Job.job_name(job_dir), "error": str(e)}
+
             entries.append(
-                Messages.SHOW_ERROR_TEMPLATE.format(
-                    name=Job.job_name(job_dir), message=e
-                )
+                jsonize(error_info)
+                if json_lines
+                else Messages.SHOW_ERROR_TEMPLATE.format(**error_info)
             )
 
     if entries:
-        print("\n\n".join(entries))  # noqa: T201
+        print(("\n" if json_lines else "\n\n").join(entries))  # noqa: T201
 
 
 def cli() -> argparse.Namespace:
@@ -295,15 +319,32 @@ def cli() -> argparse.Namespace:
     list_parser = subparsers.add_parser("list", help="list jobs")
     list_parser.set_defaults(subcommand="list")
 
+    list_parser.add_argument(
+        "-j",
+        "--json-lines",
+        action="store_true",
+        help="output JSON Lines",
+    )
+
     log_parser = subparsers.add_parser("log", help="show last log for job")
     log_parser.set_defaults(subcommand="log")
+
     log_parser.add_argument(
         "jobs", metavar="job", nargs="*", help="job for which to show logs"
     )
 
+    log_parser.add_argument(
+        "-j",
+        "--json-lines",
+        action="store_true",
+        help="output JSON Lines",
+    )
+
     run_parser = subparsers.add_parser("run", help="run jobs")
     run_parser.set_defaults(subcommand="run")
+
     run_parser.add_argument("jobs", metavar="job", nargs="*", help="job to run")
+
     run_parser.add_argument(
         "-f",
         "--force",
@@ -313,7 +354,15 @@ def cli() -> argparse.Namespace:
 
     show_parser = subparsers.add_parser("show", help="show job information")
     show_parser.set_defaults(subcommand="show")
+
     show_parser.add_argument("jobs", metavar="job", nargs="*", help="job to show")
+
+    show_parser.add_argument(
+        "-j",
+        "--json-lines",
+        action="store_true",
+        help="output JSON Lines",
+    )
 
     return parser.parse_args()
 
@@ -332,13 +381,13 @@ def main() -> None:
     config = Config.load_env(config_dir, [notify.notify_user_by_email], state_dir)
 
     if args.subcommand == "list":
-        cli_command_list(config)
+        cli_command_list(config, json_lines=args.json_lines)
     elif args.subcommand == "log":
-        cli_command_log(config, job_names=args.jobs)
+        cli_command_log(config, json_lines=args.json_lines, job_names=args.jobs)
     elif args.subcommand == "run":
         run_session(config, force=args.force, job_names=args.jobs)
     elif args.subcommand == "show":
-        cli_command_show(config, job_names=args.jobs)
+        cli_command_show(config, json_lines=args.json_lines, job_names=args.jobs)
     else:
         msg = "invalid command"
         raise ValueError(msg)

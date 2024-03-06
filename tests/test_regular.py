@@ -274,13 +274,16 @@ class TestRegular:
         }
 
     def test_parse_env_substsubst_env(self) -> None:
-        assert parse_env("DIR=${HOME}/foo", {"HOME": "/home/user"}) == {
+        assert parse_env("DIR=${HOME}/foo", subst_env={"HOME": "/home/user"}) == {
             "DIR": "/home/user/foo"
         }
 
     def test_parse_env_subst_nonexistent(self) -> None:
         with pytest.raises(KeyError):
             parse_env("foo=${no-such-var}")
+
+    def test_parse_env_subst_off(self) -> None:
+        assert parse_env("foo=${no-such-var}", subst=False) == {"foo": "${no-such-var}"}
 
     def test_parse_env_quotes(self) -> None:
         assert parse_env(

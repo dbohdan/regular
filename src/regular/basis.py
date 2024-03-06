@@ -14,7 +14,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def parse_env(env_text: str, /, subst_env: Env | None = None) -> Env:
+def parse_env(
+    env_text: str, /, *, subst: bool = True, subst_env: Env | None = None
+) -> Env:
     env = {}
     if not subst_env:
         subst_env = {}
@@ -39,17 +41,17 @@ def parse_env(env_text: str, /, subst_env: Env | None = None) -> Env:
             k = k.rstrip()
             v = v.lstrip()
 
-            subst = True
+            v_subst = subst
 
             if (v.startswith('"') and v.endswith('"')) or (
                 v.startswith("'") and v.endswith("'")
             ):
                 if v.startswith("'"):
-                    subst = False
+                    v_subst = False
 
                 v = v[1:-1]
 
-            if subst:
+            if v_subst:
                 # Replace all instances of `${foo}` with the key `foo` in `env`.
                 v = re.sub(r"\${([^}\0=]+)\}", replacement, v)
 
@@ -63,13 +65,15 @@ def parse_env(env_text: str, /, subst_env: Env | None = None) -> Env:
     return env
 
 
-def load_env(env_file: Path, subst_env: Env | None = None) -> Env:
+def load_env(
+    env_file: Path, *, subst: bool = True, subst_env: Env | None = None
+) -> Env:
     try:
         text = env_file.read_text()
     except OSError:
         return {}
 
-    return parse_env(text, subst_env)
+    return parse_env(text, subst=subst, subst_env=subst_env)
 
 
 def read_text_or_default(text_file: Path, default: str) -> str:
@@ -138,10 +142,11 @@ class Notifier(Protocol):
 
 class Messages:
     LOG_TEMPLATE = (
-        colored("{job_name}\n", attrs=["bold"])
+        colored("{name}\n", attrs=["bold"])
         + "    stdout:\n{stdout}\n    stderr:\n{stderr}"
     )
-    SHOW_ERROR_TEMPLATE = colored("{name}", attrs=["bold"]) + "\n    Error: {message}"
+    SHOW_ERROR_TEMPLATE = colored("{name}", attrs=["bold"]) + "\n    error: {error}"
+    SHOW_JOB_TITLE_TEMPLATE = colored("{name}", attrs=["bold"])
     SHOW_LAST_RUN = "last ran"
     SHOW_LAST_RUN_NEVER = "never"
     SHOW_NEVER = "never"
@@ -206,7 +211,7 @@ class Config:
     ) -> Self:
         return cls(
             config_dir=config_dir,
-            env=load_env(config_dir / FileDirNames.ENV, dict(os.environ)),
+            env=load_env(config_dir / FileDirNames.ENV, subst_env=dict(os.environ)),
             notifiers=notifiers,
             state_dir=state_dir,
         )
@@ -227,7 +232,7 @@ class Job:
         if not name:
             name = cls.job_name(job_dir)
 
-        env = load_env(job_dir / FileDirNames.ENV, dict(os.environ))
+        env = load_env(job_dir / FileDirNames.ENV, subst_env=dict(os.environ))
 
         filename = read_text_or_default(
             job_dir / FileDirNames.FILENAME, Defaults.FILENAME
