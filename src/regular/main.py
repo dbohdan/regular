@@ -131,9 +131,9 @@ def run_job_no_lock_no_queue(
     jitter_seconds = parse_duration(job.jitter).total_seconds()
     time.sleep(random.random() * jitter_seconds)  # noqa: S311
 
-    last_run_file = job.last_run_file(config.state_dir)
-    last_run_file.parent.mkdir(parents=True, exist_ok=True)
-    last_run_file.touch()
+    last_start_file = job.last_start_file(config.state_dir)
+    last_start_file.parent.mkdir(parents=True, exist_ok=True)
+    last_start_file.touch()
 
     stdout_log = job.state_dir(config.state_dir) / FileDirNames.STDOUT_LOG
     stderr_log = job.state_dir(config.state_dir) / FileDirNames.STDERR_LOG
@@ -261,11 +261,11 @@ def show_job(job: Job, config: Config, *, json: bool = False) -> str:
     if not json:
         del record["name"]
 
-    last_run = job.last_run(config.state_dir)
+    last_start = job.last_start(config.state_dir)
 
-    record[Messages.SHOW_LAST_RUN] = (
-        datetime.fromtimestamp(last_run, tz=timezone.utc).astimezone()
-        if last_run
+    record[Messages.SHOW_LAST_START] = (
+        datetime.fromtimestamp(last_start, tz=timezone.utc).astimezone()
+        if last_start
         else Messages.SHOW_NEVER
     )
 

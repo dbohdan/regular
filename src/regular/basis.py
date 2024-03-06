@@ -147,8 +147,8 @@ class Messages:
     )
     SHOW_ERROR_TEMPLATE = colored("{name}", attrs=["bold"]) + "\n    error: {error}"
     SHOW_JOB_TITLE_TEMPLATE = colored("{name}", attrs=["bold"])
-    SHOW_LAST_RUN = "last ran"
-    SHOW_LAST_RUN_NEVER = "never"
+    SHOW_LAST_START = "last start"
+    SHOW_LAST_START_NEVER = "never"
     SHOW_NEVER = "never"
     SHOW_NONE = "none"
     SHOW_NO = "no"
@@ -177,7 +177,7 @@ class FileDirNames:
     ENV = "env"
     FILENAME = "filename"
     JITTER = "jitter"
-    LAST_RUN = "last"
+    LAST_START = "last"
     MAX_WORKERS = "max-workers"
     NEVER_NOTIFY = "never-notify"
     STDOUT_LOG = "stdout.log"
@@ -266,16 +266,16 @@ class Job:
     def state_dir(self, state_dir: Path) -> Path:
         return state_dir / self.name
 
-    def last_run_file(self, state_dir: Path) -> Path:
-        return self.state_dir(state_dir) / FileDirNames.LAST_RUN
+    def last_start_file(self, state_dir: Path) -> Path:
+        return self.state_dir(state_dir) / FileDirNames.LAST_START
 
-    def last_run(self, state_dir: Path) -> float | None:
-        last_run_file = self.last_run_file(state_dir)
+    def last_start(self, state_dir: Path) -> float | None:
+        last_start_file = self.last_start_file(state_dir)
 
-        return last_run_file.stat().st_mtime if last_run_file.exists() else None
+        return last_start_file.stat().st_mtime if last_start_file.exists() else None
 
     def should_run(self, state_dir: Path) -> bool:
-        last_run = self.last_run(state_dir)
+        last_start = self.last_start(state_dir)
         min_delay = parse_duration(self.schedule).total_seconds()
 
-        return last_run is None or time.time() - last_run >= min_delay
+        return last_start is None or time.time() - last_start >= min_delay
