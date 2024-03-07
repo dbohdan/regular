@@ -197,6 +197,7 @@ DURATION_RE = " *".join(
 )
 QUEUE_LOCK_WAIT = 0.01
 SMTP_SERVER = "127.0.0.1"
+TOLERANCES = [(300, 60), (60, 12), (10, 2)]
 
 
 @dataclass(frozen=True)
@@ -310,4 +311,9 @@ class Job:
         last_start = self.last_start(state_dir)
         min_delay = parse_duration(self.schedule).total_seconds()
 
-        return last_start is None or time.time() - last_start >= min_delay
+        tolerance = 0
+        for delay, tol in TOLERANCES:
+            if min_delay >= delay:
+                tolerance = tol
+
+        return last_start is None or time.time() - last_start >= min_delay - tolerance
