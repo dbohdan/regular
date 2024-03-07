@@ -184,6 +184,9 @@ class TestRegular:
                 stdout="You should not see this message.\n",
                 stderr="",
             ),
+            JobResultCompleted(
+                name="notify-on-error", exit_status=0, stdout="", stderr=""
+            ),
         ]
 
         assert log == [

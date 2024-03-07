@@ -5,6 +5,7 @@ import re
 import time
 from dataclasses import dataclass
 from datetime import timedelta
+from enum import Enum
 from typing import TYPE_CHECKING, Protocol
 
 from termcolor import colored
@@ -172,7 +173,6 @@ class EnvVars:
 
 
 class FileDirNames:
-    ALWAYS_NOTIFY = "always-notify"
     DEFAULTS = "defaults"
     ENV = "env"
     FILENAME = "filename"
@@ -180,7 +180,7 @@ class FileDirNames:
     JITTER = "jitter"
     LAST_START = "last"
     MAX_WORKERS = "max-workers"
-    NEVER_NOTIFY = "never-notify"
+    NOTIFY = "notify"
     STDOUT_LOG = "stdout.log"
     STDERR_LOG = "stderr.log"
     QUEUE_DIR = "queue"
@@ -228,15 +228,31 @@ class Config:
         )
 
 
+class Notify(Enum):
+    NEVER = "never"
+    ALWAYS = "always"
+    ON_ERROR = "on error"
+
+    @classmethod
+    def from_str(cls, s: str, /) -> Self:
+        return cls(s.lower().replace("-", " ", 1) if s else cls.ON_ERROR)
+
+    @classmethod
+    def load(cls, notify_file: Path, /) -> Self:
+        return cls.from_str(read_text_or_default(notify_file, ""))
+
+    def __str__(self) -> str:
+        return self.value
+
+
 @dataclass(frozen=True)
 class Job:
-    always_notify: bool
     dir: Path
     env: Env
     filename: str
     jitter: str
     name: str
-    never_notify: bool
+    notify: Notify
     queue: str
     schedule: str
 
@@ -245,8 +261,6 @@ class Job:
         if not name:
             name = cls.job_name(job_dir)
 
-        always_notify = (job_dir / FileDirNames.ALWAYS_NOTIFY).exists()
-
         env = load_env(job_dir / FileDirNames.ENV, subst_env=dict(os.environ))
 
         filename = read_text_or_default(
@@ -254,7 +268,8 @@ class Job:
         )
 
         jitter = read_text_or_default(job_dir / FileDirNames.JITTER, Defaults.JITTER)
-        never_notify = (job_dir / FileDirNames.NEVER_NOTIFY).exists()
+
+        notify = Notify.load(job_dir / FileDirNames.NOTIFY)
 
         queue = read_text_or_default(job_dir / FileDirNames.QUEUE_NAME, name)
 
@@ -263,13 +278,12 @@ class Job:
         )
 
         return cls(
-            always_notify=always_notify,
             dir=job_dir,
             env=env,
             filename=filename,
             jitter=jitter,
             name=name,
-            never_notify=never_notify,
+            notify=notify,
             queue=queue,
             schedule=schedule,
         )

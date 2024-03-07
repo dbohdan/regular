@@ -14,6 +14,7 @@ from regular.basis import (
     JobResultCompleted,
     JobResultError,
     Messages,
+    Notify,
 )
 
 if TYPE_CHECKING:
@@ -87,10 +88,12 @@ def notify_user_by_email(result: JobResult) -> None:
 def notify_user_if_necessary(
     job_dir: Path, *, config: Config, result: JobResult
 ) -> None:
-    if not (job_dir / FileDirNames.NEVER_NOTIFY).exists() and (
+    notify = Notify.load(job_dir / FileDirNames.NOTIFY)
+
+    if notify != Notify.NEVER and (
         (isinstance(result, JobResultCompleted) and result.exit_status != 0)
         or isinstance(result, JobResultError)
-        or (job_dir / FileDirNames.ALWAYS_NOTIFY).exists()
+        or notify == Notify.ALWAYS
     ):
         notify_user(
             result,

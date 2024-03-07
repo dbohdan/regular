@@ -33,6 +33,7 @@ from regular.basis import (
     JobResultLocked,
     JobResultSkipped,
     Messages,
+    Notify,
     load_env,
     parse_duration,
 )
@@ -172,8 +173,16 @@ def select_jobs(config_dir: Path, /, job_names: list[str] | None = None) -> list
     )
 
 
+class JSONEncoder(json.JSONEncoder):
+    def default(self, o) -> str:
+        if isinstance(o, Notify):
+            return o.value
+
+        return super().default(o)
+
+
 def jsonize(data: Any) -> str:
-    return json.dumps(data, ensure_ascii=False)
+    return json.dumps(data, cls=JSONEncoder, ensure_ascii=False)
 
 
 def cli_command_list(config: Config, *, json_lines: bool = False) -> None:
@@ -305,7 +314,7 @@ def show_job(job: Job, config: Config, *, json: bool = False) -> str:
     lines = [Messages.SHOW_JOB_TITLE_TEMPLATE.format(name=job.name)]
 
     for k, v in record.items():
-        lines.append(f"    {k}: {show_value(v)}")
+        lines.append(f"    {k.replace('_', ' ')}: {show_value(v)}")
 
     return "\n".join(lines)
 
