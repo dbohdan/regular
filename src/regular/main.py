@@ -200,7 +200,9 @@ def cli_command_log(
                 record["logs"].append(
                     {
                         "filename": filename,
-                        "modified": str(local_datetime(log_file.stat().st_mtime)),
+                        "modified": show_value(
+                            local_datetime(log_file.stat().st_mtime)
+                        ),
                         "contents": log_file.read_text(),
                     }
                 )
@@ -256,6 +258,9 @@ def show_value(value: Any) -> str:
     if isinstance(value, bool):
         return Messages.SHOW_YES if value else Messages.SHOW_NO
 
+    if isinstance(value, datetime):
+        return value.isoformat(sep=" ", timespec="seconds")
+
     if not value:
         return Messages.SHOW_NONE
 
@@ -286,7 +291,9 @@ def show_job(job: Job, config: Config, *, json: bool = False) -> str:
     if json:
         return jsonize(
             {
-                k.replace(" ", "_"): str(v) if isinstance(v, (datetime, Path)) else v
+                k.replace(" ", "_"): show_value(v)
+                if isinstance(v, (datetime, Path))
+                else v
                 for k, v in record.items()
             }
         )
