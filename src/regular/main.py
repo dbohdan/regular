@@ -248,12 +248,7 @@ def run_session(
 
     job_dirs_to_run = select_jobs(config.config_dir, job_names)
 
-    max_workers_file = config.config_dir / FileDirNames.MAX_WORKERS
-    max_workers = (
-        int(max_workers_file.read_text().strip()) if max_workers_file.exists() else None
-    )
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
         return list(executor.map(run_job_with_config, job_dirs_to_run))
 
 

@@ -201,6 +201,7 @@ SMTP_SERVER = "127.0.0.1"
 class Config:
     config_dir: Path
     env: Env
+    max_workers: int | None
     notifiers: list[Notifier]
     state_dir: Path
 
@@ -208,9 +209,18 @@ class Config:
     def load_env(
         cls, config_dir: Path, notifiers: list[Notifier], state_dir: Path
     ) -> Self:
+        max_workers_file = config_dir / FileDirNames.MAX_WORKERS
+
+        max_workers = (
+            int(max_workers_file.read_text().strip())
+            if max_workers_file.exists()
+            else None
+        )
+
         return cls(
             config_dir=config_dir,
             env=load_env(config_dir / FileDirNames.ENV, subst_env=dict(os.environ)),
+            max_workers=max_workers,
             notifiers=notifiers,
             state_dir=state_dir,
         )
@@ -218,11 +228,13 @@ class Config:
 
 @dataclass(frozen=True)
 class Job:
+    always_notify: bool
     dir: Path
     env: Env
     filename: str
     jitter: str
     name: str
+    never_notify: bool
     queue: str
     schedule: str
 
@@ -231,6 +243,8 @@ class Job:
         if not name:
             name = cls.job_name(job_dir)
 
+        always_notify = (job_dir / FileDirNames.ALWAYS_NOTIFY).exists()
+
         env = load_env(job_dir / FileDirNames.ENV, subst_env=dict(os.environ))
 
         filename = read_text_or_default(
@@ -238,6 +252,7 @@ class Job:
         )
 
         jitter = read_text_or_default(job_dir / FileDirNames.JITTER, Defaults.JITTER)
+        never_notify = (job_dir / FileDirNames.NEVER_NOTIFY).exists()
 
         queue = read_text_or_default(job_dir / FileDirNames.QUEUE_NAME, name)
 
@@ -246,11 +261,13 @@ class Job:
         )
 
         return cls(
+            always_notify=always_notify,
             dir=job_dir,
             env=env,
             filename=filename,
             jitter=jitter,
             name=name,
+            never_notify=never_notify,
             queue=queue,
             schedule=schedule,
         )
