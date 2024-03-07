@@ -178,6 +178,10 @@ def cli_command_list(config: Config, *, json_lines: bool = False) -> None:
         print(jsonize(name) if json_lines else name)  # noqa: T201
 
 
+def local_datetime(timestamp: float) -> datetime:
+    return datetime.fromtimestamp(timestamp, tz=timezone.utc).astimezone()
+
+
 def cli_command_log(
     config: Config, *, json_lines: bool = False, job_names: list[str] | None = None
 ) -> None:
@@ -187,21 +191,36 @@ def cli_command_log(
         job = Job.load(job_dir)
         state_dir = job.state_dir(config.state_dir)
 
-        record = {"name": job.name}
+        record = {"name": job.name, "logs": []}
 
         for filename in (FileDirNames.STDOUT_LOG, FileDirNames.STDERR_LOG):
-            record[filename] = ""
             with suppress(FileNotFoundError):
-                record[filename] = (state_dir / filename).read_text()
+                log_file = state_dir / filename
+
+                record["logs"].append(
+                    {
+                        "filename": filename,
+                        "modified": str(local_datetime(log_file.stat().st_mtime)),
+                        "contents": log_file.read_text(),
+                    }
+                )
+
+        text = "\n".join(
+            Messages.LOG_FILE_TEMPLATE.format(
+                filename=log["filename"],
+                timestamp=log["modified"],
+                contents=log["contents"],
+            )
+            for log in record["logs"]
+        )
 
         print(  # noqa: T201
             jsonize(record)
             if json_lines
             else (
-                Messages.LOG_TEMPLATE.format(
+                Messages.LOG_JOB_TEMPLATE.format(
                     name=record["name"],
-                    stdout=record[FileDirNames.STDOUT_LOG],
-                    stderr=record[FileDirNames.STDERR_LOG],
+                    text=text,
                 )
             )
         )
@@ -264,9 +283,7 @@ def show_job(job: Job, config: Config, *, json: bool = False) -> str:
     last_start = job.last_start(config.state_dir)
 
     record[Messages.SHOW_LAST_START] = (
-        datetime.fromtimestamp(last_start, tz=timezone.utc).astimezone()
-        if last_start
-        else Messages.SHOW_NEVER
+        local_datetime(last_start) if last_start else Messages.SHOW_NEVER
     )
 
     record[Messages.SHOW_SHOULD_RUN] = job.should_run(config.state_dir)
