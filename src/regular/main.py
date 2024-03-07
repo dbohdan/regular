@@ -143,7 +143,7 @@ def run_job_no_lock_no_queue(
             [job.dir / job.filename],
             check=False,
             cwd=job.dir,
-            env=os.environ | config.env | job.env,
+            env=os.environ | config.defaults.env | job.env,
             stdout=f_out,
             stderr=f_err,
         )
@@ -157,7 +157,11 @@ def run_job_no_lock_no_queue(
 
 
 def available_jobs(config_dir: Path, /) -> list[Path]:
-    return [item for item in sorted(config_dir.iterdir()) if item.is_dir()]
+    return [
+        item
+        for item in sorted(config_dir.iterdir())
+        if item.is_dir() and item.name not in FileDirNames.IGNORED_JOBS
+    ]
 
 
 def select_jobs(config_dir: Path, /, job_names: list[str] | None = None) -> list[Path]:

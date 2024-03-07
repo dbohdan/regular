@@ -18,7 +18,7 @@ from regular import (
     run_job,
     run_session,
 )
-from regular.basis import load_env, parse_env
+from regular.basis import FileDirNames, load_env, parse_env
 from regular.main import QUEUE_LOCK_WAIT
 
 TEST_DIR = Path(__file__).parent
@@ -244,7 +244,7 @@ class TestRegular:
 
     def test_load_env(self) -> None:
         config, _ = config_and_log("env", TEST_DIR)
-        env_file = config.config_dir / "env"
+        env_file = config.config_dir / FileDirNames.DEFAULTS / "env"
 
         env = load_env(env_file)
 

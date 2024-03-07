@@ -173,8 +173,10 @@ class EnvVars:
 
 class FileDirNames:
     ALWAYS_NOTIFY = "always-notify"
+    DEFAULTS = "defaults"
     ENV = "env"
     FILENAME = "filename"
+    IGNORED_JOBS = frozenset({DEFAULTS})
     JITTER = "jitter"
     LAST_START = "last"
     MAX_WORKERS = "max-workers"
@@ -200,7 +202,7 @@ SMTP_SERVER = "127.0.0.1"
 @dataclass(frozen=True)
 class Config:
     config_dir: Path
-    env: Env
+    defaults: Job
     max_workers: int | None
     notifiers: list[Notifier]
     state_dir: Path
@@ -219,7 +221,7 @@ class Config:
 
         return cls(
             config_dir=config_dir,
-            env=load_env(config_dir / FileDirNames.ENV, subst_env=dict(os.environ)),
+            defaults=Job.load(config_dir / FileDirNames.DEFAULTS),
             max_workers=max_workers,
             notifiers=notifiers,
             state_dir=state_dir,
