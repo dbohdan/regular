@@ -407,15 +407,15 @@ def cli() -> argparse.Namespace:
 
     run_parser = subparsers.add_parser("run", help="run jobs")
     run_parser.set_defaults(subcommand="run")
+    run_subparsers = run_parser.add_subparsers(required=True, title="subcommands")
 
-    run_parser.add_argument("jobs", metavar="job", nargs="*", help="job to run")
+    run_due_parser = run_subparsers.add_parser("due", help="run jobs that are due")
+    run_due_parser.set_defaults(force=False)
+    run_due_parser.add_argument("jobs", metavar="job", nargs="*", help="job to run")
 
-    run_parser.add_argument(
-        "-f",
-        "--force",
-        action="store_true",
-        help="run jobs regardless of when they last ran",
-    )
+    run_now_parser = run_subparsers.add_parser("now", help="run jobs immediately")
+    run_now_parser.set_defaults(force=True)
+    run_now_parser.add_argument("jobs", metavar="job", nargs="*", help="job to run")
 
     show_parser = subparsers.add_parser("show", help="show job information")
     show_parser.set_defaults(subcommand="show")
