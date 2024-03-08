@@ -145,6 +145,7 @@ class Notifier(Protocol):
 class Messages:
     LOG_FILE_TEMPLATE = "  {filename} ({timestamp}):\n{contents}"
     LOG_JOB_TEMPLATE = colored("{name}\n", attrs=["bold"]) + "{text}"
+    SHOW_DUE = "due"
     SHOW_ERROR_TEMPLATE = colored("{name}", attrs=["bold"]) + "\n    error: {error}"
     SHOW_EXIT_STATUS = "exit status"
     SHOW_JOB_TITLE_TEMPLATE = colored("{name}", attrs=["bold"])
@@ -153,7 +154,6 @@ class Messages:
     SHOW_NEVER = "never"
     SHOW_NONE = "none"
     SHOW_NO = "no"
-    SHOW_SHOULD_RUN = "would run now"
     SHOW_YES = "yes"
     RESULT_COMPLETED_TITLE_FAILURE = "Job {name!r} failed with code {exit_status}"
     RESULT_COMPLETED_TITLE_SUCCESS = "Job {name!r} succeeded"
@@ -317,7 +317,7 @@ class Job:
 
         return last_start_file.stat().st_mtime if last_start_file.exists() else None
 
-    def should_run(self, state_dir: Path) -> bool:
+    def due(self, state_dir: Path) -> bool:
         last_start = self.last_start(state_dir)
         min_delay = parse_duration(self.schedule).total_seconds()
 

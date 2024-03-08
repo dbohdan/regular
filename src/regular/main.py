@@ -127,7 +127,7 @@ def run_job_no_lock_no_queue(
         msg = f"no job directory: {str(job.dir)!r}"
         raise FileNotFoundError(msg)
 
-    if not force and not job.should_run(config.state_dir):
+    if not force and not job.due(config.state_dir):
         return JobResultSkipped(name=job.name)
 
     jitter_seconds = parse_duration(job.jitter).total_seconds()
@@ -308,7 +308,7 @@ def show_job(job: Job, config: Config, *, json: bool = False) -> str:
 
     record[Messages.SHOW_EXIT_STATUS] = job.exit_status(config.state_dir)
 
-    record[Messages.SHOW_SHOULD_RUN] = job.should_run(config.state_dir)
+    record[Messages.SHOW_DUE] = job.due(config.state_dir)
 
     if json:
         return jsonize(
