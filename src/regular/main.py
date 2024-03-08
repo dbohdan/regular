@@ -306,13 +306,18 @@ def show_job(job: Job, config: Config, *, json: bool = False) -> str:
         job_is_running = is_running(job.state_dir(config.state_dir))
         record[Messages.SHOW_IS_RUNNING] = job_is_running
 
-        record[Messages.SHOW_RUN_TIME] = timedelta(
-            seconds=round(
-                time.time() - last_start.time
-                if job_is_running
-                else job.exit_status_file(config.state_dir).stat().st_mtime - last_start.time
-            )
-        )
+        try:
+            if job_is_running:
+                run_time = time.time() - last_start.time
+            else:
+                run_time = (
+                    job.exit_status_file(config.state_dir).stat().st_mtime
+                    - last_start.time
+                )
+
+            record[Messages.SHOW_RUN_TIME] = timedelta(seconds=round(run_time))
+        except FileNotFoundError:
+            record[Messages.SHOW_RUN_TIME] = Messages.SHOW_UNKNOWN
     else:
         record[Messages.SHOW_LAST_START] = Messages.SHOW_UNKNOWN
         record[Messages.SHOW_IS_RUNNING] = Messages.SHOW_UNKNOWN
