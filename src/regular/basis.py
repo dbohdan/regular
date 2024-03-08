@@ -146,6 +146,7 @@ class Messages:
     LOG_FILE_TEMPLATE = "  {filename} ({timestamp}):\n{contents}"
     LOG_JOB_TEMPLATE = colored("{name}\n", attrs=["bold"]) + "{text}"
     SHOW_ERROR_TEMPLATE = colored("{name}", attrs=["bold"]) + "\n    error: {error}"
+    SHOW_EXIT_STATUS = "exit status"
     SHOW_JOB_TITLE_TEMPLATE = colored("{name}", attrs=["bold"])
     SHOW_LAST_START = "last start"
     SHOW_LAST_START_NEVER = "never"
@@ -175,6 +176,7 @@ class EnvVars:
 class FileDirNames:
     DEFAULTS = "defaults"
     ENV = "env"
+    EXIT_STATUS_FILE = "exit-status"
     FILENAME = "filename"
     IGNORED_JOBS = frozenset({DEFAULTS})
     JITTER = "jitter"
@@ -292,6 +294,14 @@ class Job:
     @classmethod
     def job_name(cls, job_dir: Path) -> str:
         return job_dir.name
+
+    def exit_status_file(self, state_dir: Path) -> Path:
+        return state_dir / FileDirNames.EXIT_STATUS_FILE
+
+    def exit_status(self, state_dir: Path) -> int | None:
+        exit_status_file = self.exit_status_file(state_dir)
+
+        return int(exit_status_file.read_text()) if exit_status_file.exists() else None
 
     def queue_dir(self, state_dir: Path) -> Path:
         return state_dir / self.queue

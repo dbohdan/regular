@@ -9,6 +9,7 @@ import sys
 import textwrap
 import time
 import traceback
+from collections.abc import Sized
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
@@ -132,6 +133,10 @@ def run_job_no_lock_no_queue(
     jitter_seconds = parse_duration(job.jitter).total_seconds()
     time.sleep(random.random() * jitter_seconds)  # noqa: S311
 
+    exit_status_file = job.exit_status_file(config.state_dir)
+    with suppress(FileNotFoundError):
+        exit_status_file.unlink()
+
     last_start_file = job.last_start_file(config.state_dir)
     last_start_file.parent.mkdir(parents=True, exist_ok=True)
     last_start_file.touch()
@@ -148,6 +153,8 @@ def run_job_no_lock_no_queue(
             stdout=f_out,
             stderr=f_err,
         )
+
+    exit_status_file.write_text(str(completed.returncode))
 
     return JobResultCompleted(
         name=job.name,
@@ -268,14 +275,14 @@ def run_session(
 
 
 def show_value(value: Any) -> str:
+    if value is None or (isinstance(value, Sized) and not value):
+        return Messages.SHOW_NONE
+
     if isinstance(value, bool):
         return Messages.SHOW_YES if value else Messages.SHOW_NO
 
     if isinstance(value, datetime):
         return value.isoformat(sep=" ", timespec="seconds")
-
-    if not value:
-        return Messages.SHOW_NONE
 
     return str(value).rstrip()
 
@@ -298,6 +305,8 @@ def show_job(job: Job, config: Config, *, json: bool = False) -> str:
     record[Messages.SHOW_LAST_START] = (
         local_datetime(last_start) if last_start else Messages.SHOW_NEVER
     )
+
+    record[Messages.SHOW_EXIT_STATUS] = job.exit_status(config.state_dir)
 
     record[Messages.SHOW_SHOULD_RUN] = job.should_run(config.state_dir)
 
