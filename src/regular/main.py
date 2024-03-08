@@ -12,7 +12,7 @@ import traceback
 from collections.abc import Sized
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -127,7 +127,7 @@ def run_job_no_lock_no_queue(
         msg = f"no job directory: {str(job.dir)!r}"
         raise FileNotFoundError(msg)
 
-    if not force and not job.due(config.state_dir):
+    if not force and not job.is_due(config.state_dir):
         return JobResultSkipped(name=job.name)
 
     jitter_seconds = parse_duration(job.jitter).total_seconds()
@@ -137,9 +137,7 @@ def run_job_no_lock_no_queue(
     with suppress(FileNotFoundError):
         exit_status_file.unlink()
 
-    last_start_file = job.last_start_file(config.state_dir)
-    last_start_file.parent.mkdir(parents=True, exist_ok=True)
-    last_start_file.touch()
+    job.last_start_update(config.state_dir, os.getpid())
 
     stdout_log = job.state_dir(config.state_dir) / FileDirNames.STDOUT_LOG
     stderr_log = job.state_dir(config.state_dir) / FileDirNames.STDERR_LOG
@@ -230,7 +228,7 @@ def cli_command_log(
         text = "\n".join(
             Messages.LOG_FILE_TEMPLATE.format(
                 filename=log["filename"],
-                timestamp=log["modified"],
+                mtime=log["modified"],
                 contents=log["contents"],
             )
             for log in record["logs"]
@@ -302,13 +300,27 @@ def show_job(job: Job, config: Config, *, json: bool = False) -> str:
 
     last_start = job.last_start(config.state_dir)
 
-    record[Messages.SHOW_LAST_START] = (
-        local_datetime(last_start) if last_start else Messages.SHOW_NEVER
-    )
+    if last_start:
+        record[Messages.SHOW_LAST_START] = local_datetime(last_start.time)
+
+        job_is_running = is_running(job.state_dir(config.state_dir))
+        record[Messages.SHOW_IS_RUNNING] = job_is_running
+
+        record[Messages.SHOW_RUN_TIME] = timedelta(
+            seconds=round(
+                time.time() - last_start.time
+                if job_is_running
+                else job.exit_status_file(config.state_dir).stat().st_mtime - last_start.time
+            )
+        )
+    else:
+        record[Messages.SHOW_LAST_START] = Messages.SHOW_UNKNOWN
+        record[Messages.SHOW_IS_RUNNING] = Messages.SHOW_UNKNOWN
+        record[Messages.SHOW_RUN_TIME] = Messages.SHOW_UNKNOWN
 
     record[Messages.SHOW_EXIT_STATUS] = job.exit_status(config.state_dir)
 
-    record[Messages.SHOW_DUE] = job.due(config.state_dir)
+    record[Messages.SHOW_IS_DUE] = job.is_due(config.state_dir)
 
     if json:
         return jsonize(
@@ -326,6 +338,18 @@ def show_job(job: Job, config: Config, *, json: bool = False) -> str:
         lines.append(f"    {k.replace('_', ' ')}: {show_value(v)}")
 
     return "\n".join(lines)
+
+
+def is_running(job_state_dir: Path, /) -> bool:
+    try:
+        with portalocker.Lock(
+            job_state_dir / FileDirNames.RUNNING_LOCK,
+            fail_when_locked=True,
+            mode="r",
+        ):
+            return False
+    except portalocker.AlreadyLocked:
+        return True
 
 
 def cli_command_show(

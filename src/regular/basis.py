@@ -143,17 +143,18 @@ class Notifier(Protocol):
 
 
 class Messages:
-    LOG_FILE_TEMPLATE = "  {filename} ({timestamp}):\n{contents}"
+    LOG_FILE_TEMPLATE = "  {filename} ({mtime}):\n{contents}"
     LOG_JOB_TEMPLATE = colored("{name}\n", attrs=["bold"]) + "{text}"
-    SHOW_DUE = "due"
     SHOW_ERROR_TEMPLATE = colored("{name}", attrs=["bold"]) + "\n    error: {error}"
     SHOW_EXIT_STATUS = "exit status"
+    SHOW_IS_DUE = "due"
+    SHOW_IS_RUNNING = "running"
     SHOW_JOB_TITLE_TEMPLATE = colored("{name}", attrs=["bold"])
     SHOW_LAST_START = "last start"
-    SHOW_LAST_START_NEVER = "never"
-    SHOW_NEVER = "never"
     SHOW_NONE = "none"
     SHOW_NO = "no"
+    SHOW_RUN_TIME = "run time"
+    SHOW_UNKNOWN = "unknown"
     SHOW_YES = "yes"
     RESULT_COMPLETED_TITLE_FAILURE = "Job {name!r} failed with code {exit_status}"
     RESULT_COMPLETED_TITLE_SUCCESS = "Job {name!r} succeeded"
@@ -249,6 +250,12 @@ class Notify(Enum):
 
 
 @dataclass(frozen=True)
+class LastStart:
+    pid: int
+    time: float
+
+
+@dataclass(frozen=True)
 class Job:
     dir: Path
     env: Env
@@ -312,12 +319,24 @@ class Job:
     def last_start_file(self, state_dir: Path) -> Path:
         return self.state_dir(state_dir) / FileDirNames.LAST_START
 
-    def last_start(self, state_dir: Path) -> float | None:
+    def last_start(self, state_dir: Path) -> LastStart | None:
+        try:
+            last_start_file = self.last_start_file(state_dir)
+
+            return LastStart(
+                pid=int(last_start_file.read_text().strip()),
+                time=last_start_file.stat().st_mtime,
+            )
+        except (FileNotFoundError, ValueError):
+            return None
+
+    def last_start_update(self, state_dir: Path, pid: int) -> None:
         last_start_file = self.last_start_file(state_dir)
 
-        return last_start_file.stat().st_mtime if last_start_file.exists() else None
+        last_start_file.parent.mkdir(parents=True, exist_ok=True)
+        last_start_file.write_text(str(pid))
 
-    def due(self, state_dir: Path) -> bool:
+    def is_due(self, state_dir: Path) -> bool:
         last_start = self.last_start(state_dir)
         min_delay = parse_duration(self.schedule).total_seconds()
 
@@ -326,4 +345,6 @@ class Job:
             if min_delay >= delay:
                 tolerance = tol
 
-        return last_start is None or time.time() - last_start >= min_delay - tolerance
+        return (
+            last_start is None or time.time() - last_start.time >= min_delay - tolerance
+        )
