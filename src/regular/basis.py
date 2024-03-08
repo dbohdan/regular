@@ -303,7 +303,7 @@ class Job:
         return job_dir.name
 
     def exit_status_file(self, state_dir: Path) -> Path:
-        return state_dir / FileDirNames.EXIT_STATUS_FILE
+        return self.state_dir(state_dir) / FileDirNames.EXIT_STATUS_FILE
 
     def exit_status(self, state_dir: Path) -> int | None:
         exit_status_file = self.exit_status_file(state_dir)
