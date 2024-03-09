@@ -60,7 +60,7 @@ def job_path(configs_subdir: str, job_name: str) -> Path:
     return TEST_DIR / "configs" / configs_subdir / job_name
 
 
-class TestRegular:
+class TestSessionsAndJobs:
     def test_session_basic(self, tmp_path) -> None:
         config, _ = config_and_log("basic", tmp_path)
 
@@ -259,6 +259,8 @@ class TestRegular:
             JobResultLocked(name="wait"),
         }
 
+
+class TestEnv:
     def test_load_env(self) -> None:
         config, _ = config_and_log("env", TEST_DIR)
         env_file = config.config_root / FileDirNames.DEFAULTS / "env"
@@ -315,7 +317,9 @@ class TestRegular:
             "no_subst": "${spaces}${tabs}",
         }
 
-    def test_cli_list(self, tmp_path) -> None:
+
+class TestCLI:
+    def test_cmd_list(self, tmp_path) -> None:
         config, _ = config_and_log("basic", tmp_path)
         print_to_log, out_log = cli_output_logger()
 
@@ -323,7 +327,7 @@ class TestRegular:
 
         assert out_log == ["bar", "foo"]
 
-    def test_cli_list_jsonl(self, tmp_path) -> None:
+    def test_cmd_list_jsonl(self, tmp_path) -> None:
         config, _ = config_and_log("basic", tmp_path)
         print_to_log, out_log = cli_output_logger()
 
@@ -331,7 +335,7 @@ class TestRegular:
 
         assert out_log == ['"bar"', '"foo"']
 
-    def test_cli_log(self, tmp_path) -> None:
+    def test_cmd_log(self, tmp_path) -> None:
         config, _ = config_and_log("basic", tmp_path)
         print_to_log, out_log = cli_output_logger()
 
@@ -346,7 +350,7 @@ class TestRegular:
             r"foo\n  stdout.log \([^)]+\):\nfoo\n\n  stderr.log \([^)]+\):\n", foo
         )
 
-    def test_cli_log_jsonl(self, tmp_path) -> None:
+    def test_cmd_log_jsonl(self, tmp_path) -> None:
         config, _ = config_and_log("basic", tmp_path)
         print_to_log, out_log = cli_output_logger()
 
@@ -377,7 +381,7 @@ class TestRegular:
                 ],
             }
 
-    def test_cli_show(self, tmp_path) -> None:
+    def test_cmd_show(self, tmp_path) -> None:
         config, _ = config_and_log("basic", tmp_path)
         print_to_log, out_log = cli_output_logger()
 
@@ -388,7 +392,7 @@ class TestRegular:
         assert re.match(r"bar\n.*schedule: 1m\n", bar, re.DOTALL)
         assert re.match(r"foo\n.*schedule: 5 s\n", foo, re.DOTALL)
 
-    def test_cli_show_jsonl(self, tmp_path) -> None:
+    def test_cmd_show_jsonl(self, tmp_path) -> None:
         config, _ = config_and_log("basic", tmp_path)
         print_to_log, out_log = cli_output_logger()
 
