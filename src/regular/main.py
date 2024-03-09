@@ -182,6 +182,9 @@ class JSONEncoder(json.JSONEncoder):
         if isinstance(o, Notify):
             return o.value
 
+        if isinstance(o, timedelta):
+            return str(o)
+
         return super().default(o)
 
 
