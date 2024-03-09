@@ -167,11 +167,13 @@ def available_jobs(config_dir: Path, /) -> list[Path]:
     ]
 
 
-def select_jobs(config_dir: Path, /, job_names: list[str] | None = None) -> list[Path]:
+def select_jobs(
+    config_dir: Path, /, job_name_filter: list[str] | None = None
+) -> list[Path]:
     return (
-        [config_dir / job_name for job_name in job_names]
-        if job_names
-        else available_jobs(config_dir)
+        available_jobs(config_dir)
+        if job_name_filter is None
+        else [config_dir / job_name for job_name in job_name_filter]
     )
 
 
@@ -198,9 +200,12 @@ def local_datetime(timestamp: float) -> datetime:
 
 
 def cli_command_log(
-    config: Config, *, json_lines: bool = False, job_names: list[str] | None = None
+    config: Config,
+    *,
+    json_lines: bool = False,
+    job_name_filter: list[str] | None = None,
 ) -> None:
-    job_dirs = select_jobs(config.config_root, job_names)
+    job_dirs = select_jobs(config.config_root, job_name_filter)
 
     for job_dir in job_dirs:
         job = Job.load(job_dir, config.state_root)
@@ -243,7 +248,7 @@ def cli_command_log(
 
 
 def run_session(
-    config: Config, *, force: bool = False, job_names: list[str] | None = None
+    config: Config, *, force: bool = False, job_name_filter: list[str] | None = None
 ) -> list[JobResult]:
     def run_job_with_config(job_dir: Path) -> JobResult:
         try:
@@ -262,7 +267,7 @@ def run_session(
 
         return result
 
-    job_dirs_to_run = select_jobs(config.config_root, job_names)
+    job_dirs_to_run = select_jobs(config.config_root, job_name_filter)
 
     with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
         return list(executor.map(run_job_with_config, job_dirs_to_run))
@@ -318,7 +323,9 @@ def show_job(job: Job, *, json: bool = False) -> str:
         record[Messages.SHOW_RUN_TIME] = Messages.SHOW_UNKNOWN
 
     exit_status = job.exit_status()
-    record[Messages.SHOW_EXIT_STATUS] = Messages.SHOW_UNKNOWN if exit_status is None else exit_status
+    record[Messages.SHOW_EXIT_STATUS] = (
+        Messages.SHOW_UNKNOWN if exit_status is None else exit_status
+    )
 
     record[Messages.SHOW_IS_DUE] = job.is_due()
 
@@ -353,9 +360,12 @@ def is_running(job_state_dir: Path, /) -> bool:
 
 
 def cli_command_show(
-    config: Config, *, json_lines: bool = False, job_names: list[str] | None = None
+    config: Config,
+    *,
+    json_lines: bool = False,
+    job_name_filter: list[str] | None = None,
 ) -> None:
-    job_dirs = select_jobs(config.config_root, job_names)
+    job_dirs = select_jobs(config.config_root, job_name_filter)
 
     entries = []
     for job_dir in job_dirs:
@@ -412,10 +422,22 @@ def cli() -> argparse.Namespace:
     run_due_parser = run_subparsers.add_parser("due", help="run jobs that are due")
     run_due_parser.set_defaults(force=False)
     run_due_parser.add_argument("jobs", metavar="job", nargs="*", help="job to run")
+    run_due_parser.add_argument(
+        "-a",
+        "--all",
+        action="store_true",
+        help="run all jobs",
+    )
 
     run_now_parser = run_subparsers.add_parser("now", help="run jobs immediately")
     run_now_parser.set_defaults(force=True)
     run_now_parser.add_argument("jobs", metavar="job", nargs="*", help="job to run")
+    run_now_parser.add_argument(
+        "-a",
+        "--all",
+        action="store_true",
+        help="run all jobs",
+    )
 
     show_parser = subparsers.add_parser("show", help="show job information")
     show_parser.set_defaults(subcommand="show")
@@ -448,11 +470,13 @@ def main() -> None:
     if args.subcommand == "list":
         cli_command_list(config, json_lines=args.json_lines)
     elif args.subcommand == "log":
-        cli_command_log(config, json_lines=args.json_lines, job_names=args.jobs)
+        cli_command_log(config, json_lines=args.json_lines, job_name_filter=args.jobs or None)
     elif args.subcommand == "run":
-        run_session(config, force=args.force, job_names=args.jobs)
+        run_session(
+            config, force=args.force, job_name_filter=None if args.all else args.jobs
+        )
     elif args.subcommand == "show":
-        cli_command_show(config, json_lines=args.json_lines, job_names=args.jobs)
+        cli_command_show(config, json_lines=args.json_lines, job_name_filter=args.jobs or None)
     else:
         msg = "invalid command"
         raise ValueError(msg)
