@@ -6,6 +6,7 @@ import time
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import Enum
+from functools import cached_property
 from typing import TYPE_CHECKING, Protocol
 
 from termcolor import colored
@@ -170,14 +171,14 @@ class Defaults:
 
 
 class EnvVars:
-    CONFIG_DIR = "REGULAR_CONFIG_DIR"
-    STATE_DIR = "REGULAR_STATE_DIR"
+    CONFIG_ROOT = "REGULAR_CONFIG_DIR"
+    STATE_ROOT = "REGULAR_STATE_DIR"
 
 
 class FileDirNames:
     DEFAULTS = "defaults"
     ENV = "env"
-    EXIT_STATUS_FILE = "exit-status"
+    EXIT_STATUS = "exit-status"
     FILENAME = "filename"
     IGNORED_JOBS = frozenset({DEFAULTS})
     JITTER = "jitter"
@@ -205,17 +206,17 @@ TOLERANCES = [(300, 60), (60, 12), (10, 2)]
 
 @dataclass(frozen=True)
 class Config:
-    config_dir: Path
+    config_root: Path
     defaults: Job
     max_workers: int | None
     notifiers: list[Notifier]
-    state_dir: Path
+    state_root: Path
 
     @classmethod
     def load_env(
-        cls, config_dir: Path, notifiers: list[Notifier], state_dir: Path
+        cls, config_root: Path, notifiers: list[Notifier], state_root: Path
     ) -> Self:
-        max_workers_file = config_dir / FileDirNames.MAX_WORKERS
+        max_workers_file = config_root / FileDirNames.MAX_WORKERS
 
         max_workers = (
             int(max_workers_file.read_text().strip())
@@ -224,11 +225,11 @@ class Config:
         )
 
         return cls(
-            config_dir=config_dir,
-            defaults=Job.load(config_dir / FileDirNames.DEFAULTS),
+            config_root=config_root,
+            defaults=Job.load(config_root / FileDirNames.DEFAULTS, state_root),
             max_workers=max_workers,
             notifiers=notifiers,
-            state_dir=state_dir,
+            state_root=state_root,
         )
 
 
@@ -250,12 +251,6 @@ class Notify(Enum):
 
 
 @dataclass(frozen=True)
-class LastStart:
-    pid: int
-    time: float
-
-
-@dataclass(frozen=True)
 class Job:
     dir: Path
     env: Env
@@ -265,9 +260,18 @@ class Job:
     notify: Notify
     queue: str
     schedule: str
+    state_root: Path
+
+    def __post_init__(self) -> None:
+        parse_duration(self.jitter)
+        parse_duration(self.schedule)
 
     @classmethod
-    def load(cls, job_dir: Path, *, name: str = "") -> Self:
+    def job_name(cls, job_dir: Path) -> str:
+        return job_dir.name
+
+    @classmethod
+    def load(cls, job_dir: Path, state_root: Path, *, name: str = "") -> Self:
         if not name:
             name = cls.job_name(job_dir)
 
@@ -296,48 +300,25 @@ class Job:
             notify=notify,
             queue=queue,
             schedule=schedule,
+            state_root=state_root,
         )
 
-    @classmethod
-    def job_name(cls, job_dir: Path) -> str:
-        return job_dir.name
+    @cached_property
+    def exit_status_file(self) -> Path:
+        return self.state_dir / FileDirNames.EXIT_STATUS
 
-    def exit_status_file(self, state_dir: Path) -> Path:
-        return self.state_dir(state_dir) / FileDirNames.EXIT_STATUS_FILE
-
-    def exit_status(self, state_dir: Path) -> int | None:
-        exit_status_file = self.exit_status_file(state_dir)
-
-        return int(exit_status_file.read_text()) if exit_status_file.exists() else None
-
-    def queue_dir(self, state_dir: Path) -> Path:
-        return state_dir / self.queue
-
-    def state_dir(self, state_dir: Path) -> Path:
-        return state_dir / self.name
-
-    def last_start_file(self, state_dir: Path) -> Path:
-        return self.state_dir(state_dir) / FileDirNames.LAST_START
-
-    def last_start(self, state_dir: Path) -> LastStart | None:
+    def exit_status(self) -> int | None:
         try:
-            last_start_file = self.last_start_file(state_dir)
-
-            return LastStart(
-                pid=int(last_start_file.read_text().strip()),
-                time=last_start_file.stat().st_mtime,
-            )
+            return int(self.exit_status_file.read_text())
         except (FileNotFoundError, ValueError):
             return None
 
-    def last_start_update(self, state_dir: Path, pid: int) -> None:
-        last_start_file = self.last_start_file(state_dir)
+    def is_due(self) -> bool:
+        last_start = self.last_start()
 
-        last_start_file.parent.mkdir(parents=True, exist_ok=True)
-        last_start_file.write_text(str(pid))
+        if last_start is None:
+            return True
 
-    def is_due(self, state_dir: Path) -> bool:
-        last_start = self.last_start(state_dir)
         min_delay = parse_duration(self.schedule).total_seconds()
 
         tolerance = 0
@@ -345,6 +326,26 @@ class Job:
             if min_delay >= delay:
                 tolerance = tol
 
-        return (
-            last_start is None or time.time() - last_start.time >= min_delay - tolerance
-        )
+        return time.time() - last_start >= min_delay - tolerance
+
+    @cached_property
+    def last_start_file(self) -> Path:
+        return self.state_dir / FileDirNames.LAST_START
+
+    def last_start(self) -> float | None:
+        try:
+            return self.last_start_file.stat().st_mtime
+        except FileNotFoundError:
+            return None
+
+    def last_start_update(self, pid: int) -> None:
+        self.last_start_file.parent.mkdir(parents=True, exist_ok=True)
+        self.last_start_file.write_text(str(pid))
+
+    @cached_property
+    def queue_dir(self) -> Path:
+        return self.state_root / self.queue / FileDirNames.QUEUE_DIR
+
+    @cached_property
+    def state_dir(self) -> Path:
+        return self.state_root / self.name

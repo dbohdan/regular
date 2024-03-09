@@ -29,7 +29,7 @@ def job_path(configs_subdir: str, job_name: str) -> Path:
 
 
 def config_and_log(
-    configs_subdir: str, state_dir: Path
+    configs_subdir: str, state_root: Path
 ) -> tuple[Config, list[JobResult]]:
     result_log = []
 
@@ -38,9 +38,9 @@ def config_and_log(
 
     return (
         Config.load_env(
-            config_dir=TEST_DIR / "configs" / configs_subdir,
+            config_root=TEST_DIR / "configs" / configs_subdir,
             notifiers=[test_notify],
-            state_dir=state_dir,
+            state_root=state_root,
         ),
         result_log,
     )
@@ -216,7 +216,7 @@ class TestRegular:
 
         def time_job() -> float:
             start_time = time.time()
-            run_job(Job.load(jitter_job), config)
+            run_job(Job.load(jitter_job, config.state_root), config)
             return time.time() - start_time
 
         times = [time_job() - QUEUE_LOCK_WAIT for _ in range(20)]
@@ -235,7 +235,7 @@ class TestRegular:
         wait_job = job_path("wait", "wait")
 
         def run_wait_job(_: int) -> JobResult:
-            return run_job(Job.load(wait_job), config)
+            return run_job(Job.load(wait_job, config.state_root), config)
 
         with ThreadPoolExecutor(max_workers=2) as executor:
             results = executor.map(run_wait_job, range(2))
@@ -247,7 +247,7 @@ class TestRegular:
 
     def test_load_env(self) -> None:
         config, _ = config_and_log("env", TEST_DIR)
-        env_file = config.config_dir / FileDirNames.DEFAULTS / "env"
+        env_file = config.config_root / FileDirNames.DEFAULTS / "env"
 
         env = load_env(env_file)
 

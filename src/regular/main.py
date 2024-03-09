@@ -101,19 +101,17 @@ def run_in_queue(queue_dir: Path, /, name: str) -> Iterator[None]:
 
 
 def run_job(job: Job, config: Config, *, force: bool = False) -> JobResult:
-    lock_path = job.state_dir(config.state_dir) / FileDirNames.RUNNING_LOCK
+    lock_path = job.state_dir / FileDirNames.RUNNING_LOCK
     lock_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
         with (
             portalocker.Lock(
-                job.state_dir(config.state_dir) / FileDirNames.RUNNING_LOCK,
+                job.state_dir / FileDirNames.RUNNING_LOCK,
                 fail_when_locked=True,
                 mode="a",
             ),
-            run_in_queue(
-                job.queue_dir(config.state_dir) / FileDirNames.QUEUE_DIR, job.name
-            ),
+            run_in_queue(job.queue_dir, job.name),
         ):
             return run_job_no_lock_no_queue(job, config, force=force)
     except portalocker.AlreadyLocked:
@@ -127,20 +125,19 @@ def run_job_no_lock_no_queue(
         msg = f"no job directory: {str(job.dir)!r}"
         raise FileNotFoundError(msg)
 
-    if not force and not job.is_due(config.state_dir):
+    if not force and not job.is_due():
         return JobResultSkipped(name=job.name)
 
     jitter_seconds = parse_duration(job.jitter).total_seconds()
     time.sleep(random.random() * jitter_seconds)  # noqa: S311
 
-    exit_status_file = job.exit_status_file(config.state_dir)
     with suppress(FileNotFoundError):
-        exit_status_file.unlink()
+        job.exit_status_file.unlink()
 
-    job.last_start_update(config.state_dir, os.getpid())
+    job.last_start_update(os.getpid())
 
-    stdout_log = job.state_dir(config.state_dir) / FileDirNames.STDOUT_LOG
-    stderr_log = job.state_dir(config.state_dir) / FileDirNames.STDERR_LOG
+    stdout_log = job.state_dir / FileDirNames.STDOUT_LOG
+    stderr_log = job.state_dir / FileDirNames.STDERR_LOG
 
     with stdout_log.open("w") as f_out, stderr_log.open("w") as f_err:
         completed = sp.run(
@@ -152,7 +149,7 @@ def run_job_no_lock_no_queue(
             stderr=f_err,
         )
 
-    exit_status_file.write_text(str(completed.returncode))
+    job.exit_status_file.write_text(str(completed.returncode))
 
     return JobResultCompleted(
         name=job.name,
@@ -191,7 +188,7 @@ def jsonize(data: Any) -> str:
 
 
 def cli_command_list(config: Config, *, json_lines: bool = False) -> None:
-    for job_dir in available_jobs(config.config_dir):
+    for job_dir in available_jobs(config.config_root):
         name = Job.job_name(job_dir)
         print(jsonize(name) if json_lines else name)  # noqa: T201
 
@@ -203,17 +200,16 @@ def local_datetime(timestamp: float) -> datetime:
 def cli_command_log(
     config: Config, *, json_lines: bool = False, job_names: list[str] | None = None
 ) -> None:
-    job_dirs = select_jobs(config.config_dir, job_names)
+    job_dirs = select_jobs(config.config_root, job_names)
 
     for job_dir in job_dirs:
-        job = Job.load(job_dir)
-        state_dir = job.state_dir(config.state_dir)
+        job = Job.load(job_dir, config.state_root)
 
         record = {"name": job.name, "logs": []}
 
         for filename in (FileDirNames.STDOUT_LOG, FileDirNames.STDERR_LOG):
             with suppress(FileNotFoundError):
-                log_file = state_dir / filename
+                log_file = job.state_dir / filename
 
                 record["logs"].append(
                     {
@@ -251,7 +247,7 @@ def run_session(
 ) -> list[JobResult]:
     def run_job_with_config(job_dir: Path) -> JobResult:
         try:
-            job = Job.load(job_dir)
+            job = Job.load(job_dir, config.state_root)
             result = run_job(job, config, force=force)
         except Exception as e:  # noqa: BLE001
             tb = sys.exc_info()[-1]
@@ -266,7 +262,7 @@ def run_session(
 
         return result
 
-    job_dirs_to_run = select_jobs(config.config_dir, job_names)
+    job_dirs_to_run = select_jobs(config.config_root, job_names)
 
     with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
         return list(executor.map(run_job_with_config, job_dirs_to_run))
@@ -285,7 +281,7 @@ def show_value(value: Any) -> str:
     return str(value).rstrip()
 
 
-def show_job(job: Job, config: Config, *, json: bool = False) -> str:
+def show_job(job: Job, *, json: bool = False) -> str:
     record = dict(vars(job))
 
     if record["env"]:
@@ -297,23 +293,21 @@ def show_job(job: Job, config: Config, *, json: bool = False) -> str:
 
     if not json:
         del record["name"]
+        del record["state_root"]
 
-    last_start = job.last_start(config.state_dir)
+    last_start = job.last_start()
 
     if last_start:
-        record[Messages.SHOW_LAST_START] = local_datetime(last_start.time)
+        record[Messages.SHOW_LAST_START] = local_datetime(last_start)
 
-        job_is_running = is_running(job.state_dir(config.state_dir))
+        job_is_running = is_running(job.state_dir)
         record[Messages.SHOW_IS_RUNNING] = job_is_running
 
         try:
             if job_is_running:
-                run_time = time.time() - last_start.time
+                run_time = time.time() - last_start
             else:
-                run_time = (
-                    job.exit_status_file(config.state_dir).stat().st_mtime
-                    - last_start.time
-                )
+                run_time = job.exit_status_file.stat().st_mtime - last_start
 
             record[Messages.SHOW_RUN_TIME] = timedelta(seconds=round(run_time))
         except FileNotFoundError:
@@ -323,9 +317,9 @@ def show_job(job: Job, config: Config, *, json: bool = False) -> str:
         record[Messages.SHOW_IS_RUNNING] = Messages.SHOW_UNKNOWN
         record[Messages.SHOW_RUN_TIME] = Messages.SHOW_UNKNOWN
 
-    record[Messages.SHOW_EXIT_STATUS] = job.exit_status(config.state_dir)
+    record[Messages.SHOW_EXIT_STATUS] = job.exit_status()
 
-    record[Messages.SHOW_IS_DUE] = job.is_due(config.state_dir)
+    record[Messages.SHOW_IS_DUE] = job.is_due()
 
     if json:
         return jsonize(
@@ -360,13 +354,13 @@ def is_running(job_state_dir: Path, /) -> bool:
 def cli_command_show(
     config: Config, *, json_lines: bool = False, job_names: list[str] | None = None
 ) -> None:
-    job_dirs = select_jobs(config.config_dir, job_names)
+    job_dirs = select_jobs(config.config_root, job_names)
 
     entries = []
     for job_dir in job_dirs:
         try:
-            job = Job.load(job_dir)
-            entries.append(show_job(job, config, json=json_lines))
+            job = Job.load(job_dir, config.state_root)
+            entries.append(show_job(job, json=json_lines))
         except Exception as e:  # noqa: BLE001, PERF203
             error_info = {"name": Job.job_name(job_dir), "error": str(e)}
 
@@ -442,13 +436,13 @@ def main() -> None:
 
     dirs = PlatformDirs(APP_NAME, APP_AUTHOR)
 
-    config_dir = Path(os.environ.get(EnvVars.CONFIG_DIR, dirs.user_config_path))
-    state_dir = Path(os.environ.get(EnvVars.STATE_DIR, dirs.user_state_path))
+    config_root = Path(os.environ.get(EnvVars.CONFIG_ROOT, dirs.user_config_path))
+    state_root = Path(os.environ.get(EnvVars.STATE_ROOT, dirs.user_state_path))
 
-    for directory in (config_dir, state_dir):
+    for directory in (config_root, state_root):
         directory.mkdir(parents=True, exist_ok=True)
 
-    config = Config.load_env(config_dir, [notify.notify_user_by_email], state_dir)
+    config = Config.load_env(config_root, [notify.notify_user_by_email], state_root)
 
     if args.subcommand == "list":
         cli_command_list(config, json_lines=args.json_lines)
