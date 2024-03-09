@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Callable
 
 import pytest
 from regular import (
@@ -15,6 +17,9 @@ from regular import (
     JobResultError,
     JobResultLocked,
     JobResultSkipped,
+    cli_command_list,
+    cli_command_log,
+    cli_command_show,
     run_job,
     run_session,
 )
@@ -24,8 +29,13 @@ from regular.main import QUEUE_LOCK_WAIT
 TEST_DIR = Path(__file__).parent
 
 
-def job_path(configs_subdir: str, job_name: str) -> Path:
-    return TEST_DIR / "configs" / configs_subdir / job_name
+def cli_output_logger() -> tuple[Callable[[str], None], list[str]]:
+    out_log = []
+
+    def print_to_log(text: str) -> None:
+        out_log.append(text)
+
+    return (print_to_log, out_log)
 
 
 def config_and_log(
@@ -44,6 +54,10 @@ def config_and_log(
         ),
         result_log,
     )
+
+
+def job_path(configs_subdir: str, job_name: str) -> Path:
+    return TEST_DIR / "configs" / configs_subdir / job_name
 
 
 class TestRegular:
@@ -300,3 +314,91 @@ class TestRegular:
             "subst": "   \t\t\t",
             "no_subst": "${spaces}${tabs}",
         }
+
+    def test_cli_list(self, tmp_path) -> None:
+        config, _ = config_and_log("basic", tmp_path)
+        print_to_log, out_log = cli_output_logger()
+
+        cli_command_list(config, print_func=print_to_log)
+
+        assert out_log == ["bar", "foo"]
+
+    def test_cli_list_jsonl(self, tmp_path) -> None:
+        config, _ = config_and_log("basic", tmp_path)
+        print_to_log, out_log = cli_output_logger()
+
+        cli_command_list(config, json_lines=True, print_func=print_to_log)
+
+        assert out_log == ['"bar"', '"foo"']
+
+    def test_cli_log(self, tmp_path) -> None:
+        config, _ = config_and_log("basic", tmp_path)
+        print_to_log, out_log = cli_output_logger()
+
+        run_session(config)
+        cli_command_log(config, print_func=print_to_log)
+
+        bar, foo = out_log
+        assert re.match(
+            r"bar\n  stdout.log \([^)]+\):\nbar\n\n  stderr.log \([^)]+\):\n", bar
+        )
+        assert re.match(
+            r"foo\n  stdout.log \([^)]+\):\nfoo\n\n  stderr.log \([^)]+\):\n", foo
+        )
+
+    def test_cli_log_jsonl(self, tmp_path) -> None:
+        config, _ = config_and_log("basic", tmp_path)
+        print_to_log, out_log = cli_output_logger()
+
+        run_session(config)
+        cli_command_log(config, json_lines=True, print_func=print_to_log)
+
+        assert len(out_log) == 2
+
+        jsonl = [json.loads(line) for line in out_log]
+
+        for i, name in ((0, "bar"), (1, "foo")):
+            for j in range(2):
+                jsonl[i]["logs"][j]["modified"] = "MOD_DATETIME"
+
+            assert jsonl[i] == {
+                "name": name,
+                "logs": [
+                    {
+                        "filename": "stdout.log",
+                        "modified": "MOD_DATETIME",
+                        "contents": f"{name}\n",
+                    },
+                    {
+                        "filename": "stderr.log",
+                        "modified": "MOD_DATETIME",
+                        "contents": "",
+                    },
+                ],
+            }
+
+    def test_cli_show(self, tmp_path) -> None:
+        config, _ = config_and_log("basic", tmp_path)
+        print_to_log, out_log = cli_output_logger()
+
+        run_session(config)
+        cli_command_show(config, print_func=print_to_log)
+
+        bar, foo = out_log
+        assert re.match(r"bar\n.*schedule: 1m\n", bar, re.DOTALL)
+        assert re.match(r"foo\n.*schedule: 5 s\n", foo, re.DOTALL)
+
+    def test_cli_show_jsonl(self, tmp_path) -> None:
+        config, _ = config_and_log("basic", tmp_path)
+        print_to_log, out_log = cli_output_logger()
+
+        run_session(config)
+        cli_command_show(config, json_lines=True, print_func=print_to_log)
+
+        assert len(out_log) == 2
+
+        bar, foo = (json.loads(line) for line in out_log)
+        assert bar["name"] == "bar"
+        assert bar["schedule"] == "1m"
+        assert foo["name"] == "foo"
+        assert foo["schedule"] == "5 s"

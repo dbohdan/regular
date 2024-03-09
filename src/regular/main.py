@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 import portalocker
 from platformdirs import PlatformDirs
@@ -192,10 +192,15 @@ def jsonize(data: Any) -> str:
     return json.dumps(data, cls=JSONEncoder, ensure_ascii=False)
 
 
-def cli_command_list(config: Config, *, json_lines: bool = False) -> None:
+def cli_command_list(
+    config: Config,
+    *,
+    json_lines: bool = False,
+    print_func: Callable[[str], None] = print,
+) -> None:
     for job_dir in available_jobs(config.config_root):
         name = Job.job_name(job_dir)
-        print(jsonize(name) if json_lines else name)  # noqa: T201
+        print_func(jsonize(name) if json_lines else name)
 
 
 def local_datetime(timestamp: float) -> datetime:
@@ -207,6 +212,7 @@ def cli_command_log(
     *,
     json_lines: bool = False,
     job_name_filter: list[str] | None = None,
+    print_func: Callable[[str], None] = print,
 ) -> None:
     job_dirs = select_jobs(config.config_root, job_name_filter)
 
@@ -238,7 +244,7 @@ def cli_command_log(
             for log in record["logs"]
         )
 
-        print(  # noqa: T201
+        print_func(
             jsonize(record)
             if json_lines
             else (
@@ -367,6 +373,7 @@ def cli_command_show(
     *,
     json_lines: bool = False,
     job_name_filter: list[str] | None = None,
+    print_func: Callable[[str], None] = print,
 ) -> None:
     job_dirs = select_jobs(config.config_root, job_name_filter)
 
@@ -384,8 +391,8 @@ def cli_command_show(
                 else Messages.SHOW_ERROR_TEMPLATE.format(**error_info)
             )
 
-    if entries:
-        print(("\n" if json_lines else "\n\n").join(entries))  # noqa: T201
+    for i, entry in enumerate(entries):
+        print_func(entry if json_lines or i == len(entries) - 1 else f"{entry}\n")
 
 
 def cli() -> argparse.Namespace:
@@ -473,13 +480,17 @@ def main() -> None:
     if args.subcommand == "list":
         cli_command_list(config, json_lines=args.json_lines)
     elif args.subcommand == "log":
-        cli_command_log(config, json_lines=args.json_lines, job_name_filter=args.jobs or None)
+        cli_command_log(
+            config, json_lines=args.json_lines, job_name_filter=args.jobs or None
+        )
     elif args.subcommand == "run":
         run_session(
             config, force=args.force, job_name_filter=None if args.all else args.jobs
         )
     elif args.subcommand == "show":
-        cli_command_show(config, json_lines=args.json_lines, job_name_filter=args.jobs or None)
+        cli_command_show(
+            config, json_lines=args.json_lines, job_name_filter=args.jobs or None
+        )
     else:
         msg = "invalid command"
         raise ValueError(msg)
