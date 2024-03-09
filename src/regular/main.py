@@ -317,7 +317,8 @@ def show_job(job: Job, *, json: bool = False) -> str:
         record[Messages.SHOW_IS_RUNNING] = Messages.SHOW_UNKNOWN
         record[Messages.SHOW_RUN_TIME] = Messages.SHOW_UNKNOWN
 
-    record[Messages.SHOW_EXIT_STATUS] = job.exit_status()
+    exit_status = job.exit_status()
+    record[Messages.SHOW_EXIT_STATUS] = Messages.SHOW_UNKNOWN if exit_status is None else exit_status
 
     record[Messages.SHOW_IS_DUE] = job.is_due()
 
