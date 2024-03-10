@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import time
+from collections import ChainMap
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import Enum
@@ -19,15 +20,17 @@ if TYPE_CHECKING:
 def parse_env(
     env_text: str, /, *, subst: bool = True, subst_env: Env | None = None
 ) -> Env:
-    env = {}
     if not subst_env:
         subst_env = {}
+
+    env = {}
+    lookup_env = ChainMap(env, subst_env)
 
     def replacement(m: re.Match) -> str:
         var = m.group(1)
 
         try:
-            return env[var] if var in env else subst_env[var]
+            return lookup_env[var]
         except KeyError as e:
             msg = f"can't substitute env variable: {var!r}"
             raise KeyError(msg) from e
