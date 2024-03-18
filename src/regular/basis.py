@@ -59,7 +59,7 @@ def parse_env(
             if v_subst:
                 # Replace all instances of `${foo}`
                 # with the key `foo` in `env` or `subst_env`.
-                v = re.sub(r"\${([^}\0=]+)\}", replacement, v)
+                v = re.sub(r"\${([^}=]+)}", replacement, v)
 
             env[k] = v
 
