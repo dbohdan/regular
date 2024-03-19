@@ -136,10 +136,7 @@ def run_job_no_lock_no_queue(
 
     job.last_start_update(os.getpid())
 
-    stdout_log = job.state_dir / FileDirNames.STDOUT_LOG
-    stderr_log = job.state_dir / FileDirNames.STDERR_LOG
-
-    with stdout_log.open("w") as f_out, stderr_log.open("w") as f_err:
+    with job.stdout_file.open("w") as f_out, job.stderr_file.open("w") as f_err:
         completed = sp.run(
             [job.dir / job.filename],
             check=False,
@@ -154,8 +151,8 @@ def run_job_no_lock_no_queue(
     return JobResultCompleted(
         name=job.name,
         exit_status=completed.returncode,
-        stdout=stdout_log.read_text(),
-        stderr=stderr_log.read_text(),
+        stdout=job.stdout_file.read_text(),
+        stderr=job.stderr_file.read_text(),
     )
 
 
@@ -221,13 +218,11 @@ def cli_command_log(
 
         record = {"name": job.name, "logs": []}
 
-        for filename in (FileDirNames.STDOUT_LOG, FileDirNames.STDERR_LOG):
+        for log_file in (job.stdout_file, job.stderr_file):
             with suppress(FileNotFoundError):
-                log_file = job.state_dir / filename
-
                 record["logs"].append(
                     {
-                        "filename": filename,
+                        "filename": log_file.name,
                         "modified": show_value(
                             local_datetime(log_file.stat().st_mtime)
                         ),

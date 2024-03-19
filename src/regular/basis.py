@@ -352,3 +352,11 @@ class Job:
     @cached_property
     def state_dir(self) -> Path:
         return self.state_root / self.name
+
+    @cached_property
+    def stderr_file(self) -> Path:
+        return self.state_dir / FileDirNames.STDERR_LOG
+
+    @cached_property
+    def stdout_file(self) -> Path:
+        return self.state_dir / FileDirNames.STDOUT_LOG
