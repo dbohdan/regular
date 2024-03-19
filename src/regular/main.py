@@ -151,8 +151,8 @@ def run_job_no_lock_no_queue(
     return JobResultCompleted(
         name=job.name,
         exit_status=completed.returncode,
-        stdout=job.stdout_file.read_text(),
-        stderr=job.stderr_file.read_text(),
+        stdout=job.stdout(),
+        stderr=job.stderr(),
     )
 
 
@@ -207,8 +207,8 @@ def local_datetime(timestamp: float) -> datetime:
 def cli_command_log(
     config: Config,
     *,
-    json_lines: bool = False,
     job_name_filter: list[str] | None = None,
+    json_lines: bool = False,
     print_func: Callable[[str], None] = print,
 ) -> None:
     job_dirs = select_jobs(config.config_root, job_name_filter)
@@ -366,8 +366,8 @@ def is_running(job_state_dir: Path, /) -> bool:
 def cli_command_show(
     config: Config,
     *,
-    json_lines: bool = False,
     job_name_filter: list[str] | None = None,
+    json_lines: bool = False,
     print_func: Callable[[str], None] = print,
 ) -> None:
     job_dirs = select_jobs(config.config_root, job_name_filter)

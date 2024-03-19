@@ -120,10 +120,25 @@ class JobResult:
 
 
 @dataclass(frozen=True)
+class Log:
+    filename: str
+    lines: tuple[str, ...]
+    modified: float
+
+    @classmethod
+    def load(cls, path: Path) -> Self:
+        return cls(
+            filename=path.name,
+            lines=tuple(path.read_text().splitlines()),
+            modified=path.stat().st_mtime,
+        )
+
+
+@dataclass(frozen=True)
 class JobResultCompleted(JobResult):
     exit_status: int
-    stdout: str
-    stderr: str
+    stdout: Log
+    stderr: Log
 
 
 @dataclass(frozen=True)
@@ -357,6 +372,12 @@ class Job:
     def stderr_file(self) -> Path:
         return self.state_dir / FileDirNames.STDERR_LOG
 
+    def stderr(self) -> Log:
+        return Log.load(self.stderr_file)
+
     @cached_property
     def stdout_file(self) -> Path:
         return self.state_dir / FileDirNames.STDOUT_LOG
+
+    def stdout(self) -> Log:
+        return Log.load(self.stdout_file)

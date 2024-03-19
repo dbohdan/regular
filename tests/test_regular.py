@@ -6,9 +6,11 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
+from unittest.mock import ANY
 
 import pytest
+from deepdiff.diff import DeepDiff
 from regular import (
     Config,
     Job,
@@ -23,8 +25,11 @@ from regular import (
     run_job,
     run_session,
 )
-from regular.basis import FileDirNames, load_env, parse_env
+from regular.basis import FileDirNames, Log, load_env, parse_env
 from regular.main import QUEUE_LOCK_WAIT
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 TEST_DIR = Path(__file__).parent
 
@@ -60,6 +65,18 @@ def job_path(configs_subdir: str, job_name: str) -> Path:
     return TEST_DIR / "configs" / configs_subdir / job_name
 
 
+def mock_log(filename: str, lines: Sequence[str]) -> Log:
+    return Log(filename=filename, modified=ANY, lines=tuple(lines))
+
+
+def stderr(*lines: str) -> Log:
+    return mock_log(FileDirNames.STDERR_LOG, lines)
+
+
+def stdout(*lines: str) -> Log:
+    return mock_log(FileDirNames.STDOUT_LOG, lines)
+
+
 class TestSessionsAndJobs:
     def test_session_basic(self, tmp_path) -> None:
         config, _ = config_and_log("basic", tmp_path)
@@ -67,8 +84,12 @@ class TestSessionsAndJobs:
         results = run_session(config)
 
         assert results == [
-            JobResultCompleted(name="bar", exit_status=0, stdout="bar\n", stderr=""),
-            JobResultCompleted(name="foo", exit_status=0, stdout="foo\n", stderr=""),
+            JobResultCompleted(
+                name="bar", exit_status=0, stdout=stdout("bar"), stderr=stderr()
+            ),
+            JobResultCompleted(
+                name="foo", exit_status=0, stdout=stdout("foo"), stderr=stderr()
+            ),
         ]
 
         results = run_session(config)
@@ -81,10 +102,11 @@ class TestSessionsAndJobs:
     def test_session_basic_force(self, tmp_path) -> None:
         config, _ = config_and_log("basic", tmp_path)
 
-        results1 = run_session(config)
-        results2 = run_session(config, force=True)
+        diff = DeepDiff(
+            run_session(config), run_session(config, force=True), exclude_types=(float,)
+        )
 
-        assert results1 == results2
+        assert not diff
 
     def test_session_cwd(self, tmp_path) -> None:
         config, _ = config_and_log("cwd", tmp_path)
@@ -92,7 +114,7 @@ class TestSessionsAndJobs:
         results = run_session(config)
 
         assert isinstance(results[0], JobResultCompleted)
-        assert results[0].stdout.strip().endswith("configs/cwd/cwd")
+        assert results[0].stdout.lines[-1].strip().endswith("configs/cwd/cwd")
 
     def test_session_concurrent(self, tmp_path) -> None:
         config, _ = config_and_log("concurrent", tmp_path)
@@ -112,16 +134,19 @@ class TestSessionsAndJobs:
 
         assert results == [
             JobResultCompleted(
-                name="greet", exit_status=0, stdout="Hello, world!\n", stderr=""
+                name="greet",
+                exit_status=0,
+                stdout=stdout("Hello, world!"),
+                stderr=stderr(),
             ),
             JobResultCompleted(
-                name="os-var", exit_status=0, stdout=f"{os_var}\n", stderr=""
+                name="os-var", exit_status=0, stdout=stdout(os_var), stderr=stderr()
             ),
             JobResultCompleted(
                 name="override",
                 exit_status=0,
-                stdout="Message overridden.\n",
-                stderr="",
+                stdout=stdout("Message overridden."),
+                stderr=stderr(),
             ),
         ]
 
@@ -141,7 +166,10 @@ class TestSessionsAndJobs:
 
         assert results == [
             JobResultCompleted(
-                name="failure", exit_status=99, stdout="failure\n", stderr="nope\n"
+                name="failure",
+                exit_status=99,
+                stdout=stdout("failure"),
+                stderr=stderr("nope"),
             ),
         ]
 
@@ -151,7 +179,9 @@ class TestSessionsAndJobs:
         results = run_session(config)
 
         assert results == [
-            JobResultCompleted(name="foo", exit_status=0, stdout="run.sh\n", stderr=""),
+            JobResultCompleted(
+                name="foo", exit_status=0, stdout=stdout("run.sh"), stderr=stderr()
+            ),
         ]
 
     def test_session_invalid_jitter(self, tmp_path) -> None:
@@ -190,22 +220,28 @@ class TestSessionsAndJobs:
 
         assert results == [
             JobResultCompleted(
-                name="always-notify", exit_status=0, stdout="always\n", stderr=""
+                name="always-notify",
+                exit_status=0,
+                stdout=stdout("always"),
+                stderr=stderr(),
             ),
             JobResultCompleted(
                 name="never-notify",
                 exit_status=99,
-                stdout="You should not see this message.\n",
-                stderr="",
+                stdout=stdout("You should not see this message."),
+                stderr=stderr(),
             ),
             JobResultCompleted(
-                name="notify-on-error", exit_status=0, stdout="", stderr=""
+                name="notify-on-error", exit_status=0, stdout=stdout(), stderr=stderr()
             ),
         ]
 
         assert log == [
             JobResultCompleted(
-                name="always-notify", exit_status=0, stdout="always\n", stderr=""
+                name="always-notify",
+                exit_status=0,
+                stdout=stdout("always"),
+                stderr=stderr(),
             ),
         ]
 
@@ -216,11 +252,21 @@ class TestSessionsAndJobs:
         duration = time.time() - start_time
 
         assert results == [
-            JobResultCompleted(name="bar-1", exit_status=0, stdout="", stderr=""),
-            JobResultCompleted(name="bar-2", exit_status=0, stdout="", stderr=""),
-            JobResultCompleted(name="foo-1", exit_status=0, stdout="", stderr=""),
-            JobResultCompleted(name="foo-2", exit_status=0, stdout="", stderr=""),
-            JobResultCompleted(name="foo-3", exit_status=0, stdout="", stderr=""),
+            JobResultCompleted(
+                name="bar-1", exit_status=0, stdout=stdout(), stderr=stderr()
+            ),
+            JobResultCompleted(
+                name="bar-2", exit_status=0, stdout=stdout(), stderr=stderr()
+            ),
+            JobResultCompleted(
+                name="foo-1", exit_status=0, stdout=stdout(), stderr=stderr()
+            ),
+            JobResultCompleted(
+                name="foo-2", exit_status=0, stdout=stdout(), stderr=stderr()
+            ),
+            JobResultCompleted(
+                name="foo-3", exit_status=0, stdout=stdout(), stderr=stderr()
+            ),
         ]
         assert 3 < duration < 4
 
@@ -252,12 +298,14 @@ class TestSessionsAndJobs:
             return run_job(Job.load(wait_job, config.state_root), config)
 
         with ThreadPoolExecutor(max_workers=2) as executor:
-            results = executor.map(run_wait_job, range(2))
+            results = list(executor.map(run_wait_job, range(2)))
 
-        assert set(results) == {
-            JobResultCompleted(name="wait", exit_status=0, stdout="", stderr=""),
-            JobResultLocked(name="wait"),
-        }
+        res1 = JobResultCompleted(
+            name="wait", exit_status=0, stdout=stdout(), stderr=stderr()
+        )
+        res2 = JobResultLocked(name="wait")
+
+        assert results in ([res1, res2], [res2, res1])
 
 
 class TestEnv:
