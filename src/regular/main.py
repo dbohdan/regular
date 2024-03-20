@@ -288,8 +288,9 @@ def show_job(
         del record["name"]
         del record["state_root"]
 
-    last_start = job.last_start()
+    record[Messages.SHOW_IS_DUE] = job.is_due()
 
+    last_start = job.last_start()
     if last_start:
         record[Messages.SHOW_LAST_START] = local_datetime(last_start)
 
@@ -329,8 +330,6 @@ def show_job(
                 "modified": local_datetime(log.modified),
                 "lines": log.lines[-log_lines:] if log_lines > 0 else log.lines,
             }
-
-    record[Messages.SHOW_IS_DUE] = job.is_due()
 
     if json:
         return jsonize(record)
