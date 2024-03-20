@@ -25,7 +25,7 @@ from regular import (
     run_job,
     run_session,
 )
-from regular.basis import Defaults, FileDirNames, Log, load_env, parse_env
+from regular.basis import FileDirNames, Log, load_env, parse_env
 from regular.main import QUEUE_LOCK_WAIT
 
 if TYPE_CHECKING:
@@ -464,9 +464,9 @@ class TestCLI:
         cli_command_show(config, json_lines=True, print_func=print_to_log)
 
         for i in range(2):
-            entry = json.loads(out_log[i])
-            assert len(entry["stdout"]) == 1
-            assert not entry["stderr"]
+            logs = json.loads(out_log[i])["logs"]
+            assert len(logs["stdout.log"]["lines"]) == 1
+            assert not logs["stderr.log"]["lines"]
 
     def test_cmd_show_log_lines_zero(self, tmp_path) -> None:
         config, _ = config_and_log("basic", tmp_path)
@@ -478,5 +478,4 @@ class TestCLI:
 
         for i in range(2):
             entry = json.loads(out_log[i])
-            assert "stdout" not in entry
-            assert "stderr" not in entry
+            assert "logs" not in entry

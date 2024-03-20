@@ -6,12 +6,12 @@ import os
 import random
 import subprocess as sp
 import sys
-import textwrap
 import time
 import traceback
-from collections.abc import Sized
+from collections.abc import Mapping, Sequence, Sized
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
+from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
@@ -180,7 +180,7 @@ class JSONEncoder(json.JSONEncoder):
         if isinstance(o, Notify):
             return o.value
 
-        if isinstance(o, timedelta):
+        if isinstance(o, (Path, datetime, timedelta)):
             return str(o)
 
         return super().default(o)
@@ -278,9 +278,38 @@ def run_session(
         return list(executor.map(run_job_with_config, job_dirs_to_run))
 
 
-def show_value(value: Any) -> str:
+def show_value(  # noqa: PLR0911
+    value: Any,
+    *,
+    indent: int = 0,
+    indent_incr: int = 4,
+    indent_text: str = " ",
+) -> str:
+    def fmt(prefix: str, x: Any) -> str:
+        s = show_value(
+            x,
+            indent=indent + indent_incr,
+            indent_incr=indent_incr,
+            indent_text=indent_text,
+        )
+
+        return (
+            indent * indent_text
+            + prefix
+            + (f"\n{s}" if "\n" in s and not s.startswith("\n") else s)
+        )
+
     if value is None or (isinstance(value, Sized) and not value):
         return Messages.SHOW_NONE
+
+    if isinstance(value, str):
+        return value
+
+    if isinstance(value, Sequence):
+        return "\n" + "\n".join(fmt("", x) for x in value)
+
+    if isinstance(value, Mapping):
+        return "\n".join(fmt(f"{k}: ", v) for k, v in value.items())
 
     if isinstance(value, bool):
         return Messages.SHOW_YES if value else Messages.SHOW_NO
@@ -297,16 +326,10 @@ def show_job(
     log_lines: int,
     json: bool = False,
 ) -> str:
-    indent = " " * 8
-
-    record = dict(vars(job))
+    record = asdict(job)
 
     if record["env"]:
-        record["env"] = (
-            load_env(job.dir / "env", subst=False)
-            if json
-            else "\n" + textwrap.indent((job.dir / "env").read_text(), indent)
-        )
+        record["env"] = load_env(job.dir / "env", subst=False)
 
     if not json:
         del record["name"]
@@ -340,32 +363,30 @@ def show_job(
     )
 
     if log_lines != 0:
+        logs = {}
+        record["logs"] = logs
+
         for load_log in (job.stdout, job.stderr):
-            with suppress(FileNotFoundError):
+            try:
                 log = load_log()
-                tail = log.lines[-log_lines:] if log_lines > 0 else log.lines
-                record[Path(log.filename).stem] = (
-                    tail if json else textwrap.indent("\n".join(["", *tail]), indent)
-                )
+            except FileNotFoundError:
+                continue
+
+            logs[log.filename] = {
+                "modified": local_datetime(log.modified),
+                "lines": log.lines[-log_lines:] if log_lines > 0 else log.lines,
+            }
 
     record[Messages.SHOW_IS_DUE] = job.is_due()
 
     if json:
-        return jsonize(
-            {
-                k.replace(" ", "_"): show_value(v)
-                if isinstance(v, (datetime, Path))
-                else v
-                for k, v in record.items()
-            }
-        )
+        return jsonize(record)
 
-    lines = [Messages.SHOW_JOB_TITLE_TEMPLATE.format(name=job.name)]
-
-    for k, v in record.items():
-        lines.append(f"    {k.replace('_', ' ')}: {show_value(v)}")
-
-    return "\n".join(lines)
+    return (
+        Messages.SHOW_JOB_TITLE_TEMPLATE.format(name=job.name)
+        + "\n"
+        + show_value(record, indent=4)
+    )
 
 
 def is_running(job_state_dir: Path, /) -> bool:
