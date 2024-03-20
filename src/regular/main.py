@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import random
+import shutil
 import subprocess as sp
 import sys
 import time
@@ -278,6 +279,7 @@ def show_job(
     *,
     log_lines: int,
     json: bool = False,
+    ruler: str = "",
 ) -> str:
     record = asdict(job)
 
@@ -326,9 +328,13 @@ def show_job(
             except FileNotFoundError:
                 continue
 
+            lines = log.lines[-log_lines:] if log_lines > 0 else log.lines
+            if not json and lines:
+                lines = f"{ruler}\n" + "\n".join(lines) + f"\n{ruler}"
+
             logs[log.filename] = {
                 "modified": local_datetime(log.modified),
-                "lines": log.lines[-log_lines:] if log_lines > 0 else log.lines,
+                "lines": lines,
             }
 
     if json:
@@ -363,11 +369,16 @@ def cli_command_status(
 ) -> None:
     job_dirs = select_jobs(config.config_root, job_name_filter)
 
+    columns, _ = shutil.get_terminal_size()
+    ruler = columns * "-"
+
     entries = []
     for job_dir in job_dirs:
         try:
             job = Job.load(job_dir, config.state_root)
-            entries.append(show_job(job, json=json_lines, log_lines=log_lines))
+            entries.append(
+                show_job(job, json=json_lines, log_lines=log_lines, ruler=ruler)
+            )
         except Exception as e:  # noqa: BLE001, PERF203
             error_info = {"name": Job.job_name(job_dir), "error": str(e)}
 
