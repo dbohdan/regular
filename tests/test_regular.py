@@ -20,7 +20,7 @@ from regular import (
     JobResultLocked,
     JobResultSkipped,
     cli_command_list,
-    cli_command_show,
+    cli_command_status,
     run_job,
     run_session,
 )
@@ -382,23 +382,23 @@ class TestCLI:
 
         assert out_log == ['"bar"', '"foo"']
 
-    def test_cmd_show(self, tmp_path) -> None:
+    def test_cmd_status(self, tmp_path) -> None:
         config, _ = config_and_log("basic", tmp_path)
         print_to_log, out_log = cli_output_logger()
 
         run_session(config)
-        cli_command_show(config, print_func=print_to_log)
+        cli_command_status(config, print_func=print_to_log)
 
         bar, foo = out_log
         assert re.match(r"bar\n.*schedule: 1m\n", bar, re.DOTALL)
         assert re.match(r"foo\n.*schedule: 5 s\n", foo, re.DOTALL)
 
-    def test_cmd_show_jsonl(self, tmp_path) -> None:
+    def test_cmd_status_jsonl(self, tmp_path) -> None:
         config, _ = config_and_log("basic", tmp_path)
         print_to_log, out_log = cli_output_logger()
 
         run_session(config)
-        cli_command_show(config, json_lines=True, print_func=print_to_log)
+        cli_command_status(config, json_lines=True, print_func=print_to_log)
 
         assert len(out_log) == 2
 
@@ -408,26 +408,28 @@ class TestCLI:
         assert foo["name"] == "foo"
         assert foo["schedule"] == "5 s"
 
-    def test_cmd_show_log_lines_default(self, tmp_path) -> None:
+    def test_cmd_status_log_lines_default(self, tmp_path) -> None:
         config, _ = config_and_log("basic", tmp_path)
         print_to_log, out_log = cli_output_logger()
 
         run_session(config)
 
-        cli_command_show(config, json_lines=True, print_func=print_to_log)
+        cli_command_status(config, json_lines=True, print_func=print_to_log)
 
         for i in range(2):
             logs = json.loads(out_log[i])["logs"]
             assert len(logs["stdout.log"]["lines"]) == 1
             assert not logs["stderr.log"]["lines"]
 
-    def test_cmd_show_log_lines_zero(self, tmp_path) -> None:
+    def test_cmd_status_log_lines_zero(self, tmp_path) -> None:
         config, _ = config_and_log("basic", tmp_path)
         print_to_log, out_log = cli_output_logger()
 
         run_session(config)
 
-        cli_command_show(config, json_lines=True, log_lines=0, print_func=print_to_log)
+        cli_command_status(
+            config, json_lines=True, log_lines=0, print_func=print_to_log
+        )
 
         for i in range(2):
             entry = json.loads(out_log[i])

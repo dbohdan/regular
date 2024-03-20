@@ -354,7 +354,7 @@ def is_running(job_state_dir: Path, /) -> bool:
         return True
 
 
-def cli_command_show(
+def cli_command_status(
     config: Config,
     *,
     job_name_filter: list[str] | None = None,
@@ -422,18 +422,18 @@ def cli() -> argparse.Namespace:
         help="run all jobs",
     )
 
-    show_parser = subparsers.add_parser("show", help="show job information")
-    show_parser.set_defaults(subcommand="show")
+    status_parser = subparsers.add_parser("status", help="show job status")
+    status_parser.set_defaults(subcommand="status")
 
-    show_parser.add_argument("jobs", metavar="job", nargs="*", help="job to show")
+    status_parser.add_argument("jobs", metavar="job", nargs="*", help="job to show")
 
-    show_parser.add_argument(
+    status_parser.add_argument(
         "-j",
         "--json-lines",
         action="store_true",
         help="output JSON Lines",
     )
-    show_parser.add_argument(
+    status_parser.add_argument(
         "-l",
         "--log-lines",
         default=Defaults.LOG_LINES,
@@ -463,8 +463,8 @@ def main() -> None:
         run_session(
             config, force=args.force, job_name_filter=None if args.all else args.jobs
         )
-    elif args.subcommand == "show":
-        cli_command_show(
+    elif args.subcommand == "status":
+        cli_command_status(
             config,
             job_name_filter=args.jobs or None,
             json_lines=args.json_lines,
