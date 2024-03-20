@@ -185,6 +185,7 @@ class Messages:
 class Defaults:
     FILENAME = "script"
     JITTER = ""
+    LOG_LINES = 3
     SCHEDULE = "1d"
 
 

@@ -25,6 +25,7 @@ from regular.basis import (
     APP_NAME,
     QUEUE_LOCK_WAIT,
     Config,
+    Defaults,
     EnvVars,
     FileDirNames,
     Job,
@@ -290,14 +291,21 @@ def show_value(value: Any) -> str:
     return str(value).rstrip()
 
 
-def show_job(job: Job, *, json: bool = False) -> str:
+def show_job(
+    job: Job,
+    *,
+    log_lines: int,
+    json: bool = False,
+) -> str:
+    indent = " " * 8
+
     record = dict(vars(job))
 
     if record["env"]:
         record["env"] = (
             load_env(job.dir / "env", subst=False)
             if json
-            else "\n" + textwrap.indent((job.dir / "env").read_text(), "        ")
+            else "\n" + textwrap.indent((job.dir / "env").read_text(), indent)
         )
 
     if not json:
@@ -330,6 +338,15 @@ def show_job(job: Job, *, json: bool = False) -> str:
     record[Messages.SHOW_EXIT_STATUS] = (
         Messages.SHOW_UNKNOWN if exit_status is None else exit_status
     )
+
+    if log_lines != 0:
+        for load_log in (job.stdout, job.stderr):
+            with suppress(FileNotFoundError):
+                log = load_log()
+                tail = log.lines[-log_lines:] if log_lines > 0 else log.lines
+                record[Path(log.filename).stem] = (
+                    tail if json else textwrap.indent("\n".join(["", *tail]), indent)
+                )
 
     record[Messages.SHOW_IS_DUE] = job.is_due()
 
@@ -368,6 +385,7 @@ def cli_command_show(
     *,
     job_name_filter: list[str] | None = None,
     json_lines: bool = False,
+    log_lines: int = -1,
     print_func: Callable[[str], None] = print,
 ) -> None:
     job_dirs = select_jobs(config.config_root, job_name_filter)
@@ -376,7 +394,7 @@ def cli_command_show(
     for job_dir in job_dirs:
         try:
             job = Job.load(job_dir, config.state_root)
-            entries.append(show_job(job, json=json_lines))
+            entries.append(show_job(job, json=json_lines, log_lines=log_lines))
         except Exception as e:  # noqa: BLE001, PERF203
             error_info = {"name": Job.job_name(job_dir), "error": str(e)}
 
@@ -455,6 +473,13 @@ def cli() -> argparse.Namespace:
         action="store_true",
         help="output JSON Lines",
     )
+    show_parser.add_argument(
+        "-l",
+        "--log-lines",
+        default=Defaults.LOG_LINES,
+        help="how many log files to show",
+        type=int,
+    )
 
     return parser.parse_args()
 
@@ -484,7 +509,10 @@ def main() -> None:
         )
     elif args.subcommand == "show":
         cli_command_show(
-            config, json_lines=args.json_lines, job_name_filter=args.jobs or None
+            config,
+            job_name_filter=args.jobs or None,
+            json_lines=args.json_lines,
+            log_lines=args.log_lines,
         )
     else:
         msg = "invalid command"
