@@ -20,7 +20,6 @@ from regular import (
     JobResultLocked,
     JobResultSkipped,
     cli_command_list,
-    cli_command_log,
     cli_command_show,
     run_job,
     run_session,
@@ -382,52 +381,6 @@ class TestCLI:
         cli_command_list(config, json_lines=True, print_func=print_to_log)
 
         assert out_log == ['"bar"', '"foo"']
-
-    def test_cmd_log(self, tmp_path) -> None:
-        config, _ = config_and_log("basic", tmp_path)
-        print_to_log, out_log = cli_output_logger()
-
-        run_session(config)
-        cli_command_log(config, print_func=print_to_log)
-
-        bar, foo = out_log
-        assert re.match(
-            r"bar\n  stdout.log \([^)]+\):\nbar\n\n  stderr.log \([^)]+\):\n", bar
-        )
-        assert re.match(
-            r"foo\n  stdout.log \([^)]+\):\nfoo\n\n  stderr.log \([^)]+\):\n", foo
-        )
-
-    def test_cmd_log_jsonl(self, tmp_path) -> None:
-        config, _ = config_and_log("basic", tmp_path)
-        print_to_log, out_log = cli_output_logger()
-
-        run_session(config)
-        cli_command_log(config, json_lines=True, print_func=print_to_log)
-
-        assert len(out_log) == 2
-
-        jsonl = [json.loads(line) for line in out_log]
-
-        for i, name in ((0, "bar"), (1, "foo")):
-            for j in range(2):
-                jsonl[i]["logs"][j]["modified"] = "MOD_DATETIME"
-
-            assert jsonl[i] == {
-                "name": name,
-                "logs": [
-                    {
-                        "filename": "stdout.log",
-                        "modified": "MOD_DATETIME",
-                        "contents": f"{name}\n",
-                    },
-                    {
-                        "filename": "stderr.log",
-                        "modified": "MOD_DATETIME",
-                        "contents": "",
-                    },
-                ],
-            }
 
     def test_cmd_show(self, tmp_path) -> None:
         config, _ = config_and_log("basic", tmp_path)

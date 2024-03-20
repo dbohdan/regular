@@ -205,53 +205,6 @@ def local_datetime(timestamp: float) -> datetime:
     return datetime.fromtimestamp(timestamp, tz=timezone.utc).astimezone()
 
 
-def cli_command_log(
-    config: Config,
-    *,
-    job_name_filter: list[str] | None = None,
-    json_lines: bool = False,
-    print_func: Callable[[str], None] = print,
-) -> None:
-    job_dirs = select_jobs(config.config_root, job_name_filter)
-
-    for job_dir in job_dirs:
-        job = Job.load(job_dir, config.state_root)
-
-        record = {"name": job.name, "logs": []}
-
-        for log_file in (job.stdout_file, job.stderr_file):
-            with suppress(FileNotFoundError):
-                record["logs"].append(
-                    {
-                        "filename": log_file.name,
-                        "modified": show_value(
-                            local_datetime(log_file.stat().st_mtime)
-                        ),
-                        "contents": log_file.read_text(),
-                    }
-                )
-
-        text = "\n".join(
-            Messages.LOG_FILE_TEMPLATE.format(
-                filename=log["filename"],
-                mtime=log["modified"],
-                contents=log["contents"],
-            )
-            for log in record["logs"]
-        )
-
-        print_func(
-            jsonize(record)
-            if json_lines
-            else (
-                Messages.LOG_JOB_TEMPLATE.format(
-                    name=record["name"],
-                    text=text,
-                )
-            )
-        )
-
-
 def run_session(
     config: Config, *, force: bool = False, job_name_filter: list[str] | None = None
 ) -> list[JobResult]:
@@ -445,20 +398,6 @@ def cli() -> argparse.Namespace:
         help="output JSON Lines",
     )
 
-    log_parser = subparsers.add_parser("log", help="show last log for job")
-    log_parser.set_defaults(subcommand="log")
-
-    log_parser.add_argument(
-        "jobs", metavar="job", nargs="*", help="job for which to show logs"
-    )
-
-    log_parser.add_argument(
-        "-j",
-        "--json-lines",
-        action="store_true",
-        help="output JSON Lines",
-    )
-
     run_parser = subparsers.add_parser("run", help="run jobs")
     run_parser.set_defaults(subcommand="run")
     run_subparsers = run_parser.add_subparsers(required=True, title="subcommands")
@@ -498,7 +437,7 @@ def cli() -> argparse.Namespace:
         "-l",
         "--log-lines",
         default=Defaults.LOG_LINES,
-        help="how many log files to show",
+        help="how many log lines to show",
         type=int,
     )
 
@@ -520,10 +459,6 @@ def main() -> None:
 
     if args.subcommand == "list":
         cli_command_list(config, json_lines=args.json_lines)
-    elif args.subcommand == "log":
-        cli_command_log(
-            config, json_lines=args.json_lines, job_name_filter=args.jobs or None
-        )
     elif args.subcommand == "run":
         run_session(
             config, force=args.force, job_name_filter=None if args.all else args.jobs
