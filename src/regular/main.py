@@ -294,10 +294,10 @@ def show_job(
 
     last_start = job.last_start()
     if last_start:
-        record[Messages.SHOW_LAST_START] = local_datetime(last_start)
-
         job_is_running = is_running(job.state_dir)
         record[Messages.SHOW_IS_RUNNING] = job_is_running
+
+        record[Messages.SHOW_LAST_START] = local_datetime(last_start)
 
         try:
             if job_is_running:
@@ -309,8 +309,8 @@ def show_job(
         except FileNotFoundError:
             record[Messages.SHOW_RUN_TIME] = Messages.SHOW_UNKNOWN
     else:
-        record[Messages.SHOW_LAST_START] = Messages.SHOW_UNKNOWN
         record[Messages.SHOW_IS_RUNNING] = Messages.SHOW_UNKNOWN
+        record[Messages.SHOW_LAST_START] = Messages.SHOW_UNKNOWN
         record[Messages.SHOW_RUN_TIME] = Messages.SHOW_UNKNOWN
 
     exit_status = job.exit_status()
