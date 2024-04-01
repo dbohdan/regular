@@ -204,7 +204,8 @@ class FileDirNames:
     JITTER = "jitter"
     LAST_START = "last"
     MAX_WORKERS = "max-workers"
-    NOTIFY = "notify"
+    NOTIFY_ALWAYS = "always-notify"
+    NOTIFY_NEVER = "never-notify"
     STDOUT_LOG = "stdout.log"
     STDERR_LOG = "stderr.log"
     QUEUE_DIR = "queue"
@@ -259,12 +260,14 @@ class Notify(Enum):
     ON_ERROR = "on error"
 
     @classmethod
-    def from_str(cls, s: str, /) -> Self:
-        return cls(s.lower().replace("-", " ", 1) if s else cls.ON_ERROR)
+    def load(cls, job_dir: Path, /) -> Self:
+        if (job_dir / FileDirNames.NOTIFY_ALWAYS).exists():
+            return cls(cls.ALWAYS)
 
-    @classmethod
-    def load(cls, notify_file: Path, /) -> Self:
-        return cls.from_str(read_text_or_default(notify_file, ""))
+        if (job_dir / FileDirNames.NOTIFY_NEVER).exists():
+            return cls(cls.NEVER)
+
+        return cls(cls.ON_ERROR)
 
     def __str__(self) -> str:
         return self.value
@@ -278,7 +281,6 @@ class Job:
     filename: str
     jitter: str
     name: str
-    notify: Notify
     queue: str
     schedule: str
     state_root: Path
@@ -306,8 +308,6 @@ class Job:
 
         jitter = read_text_or_default(job_dir / FileDirNames.JITTER, Defaults.JITTER)
 
-        notify = Notify.load(job_dir / FileDirNames.NOTIFY)
-
         queue = read_text_or_default(job_dir / FileDirNames.QUEUE_NAME, name)
 
         schedule = read_text_or_default(
@@ -321,7 +321,6 @@ class Job:
             filename=filename,
             jitter=jitter,
             name=name,
-            notify=notify,
             queue=queue,
             schedule=schedule,
             state_root=state_root,

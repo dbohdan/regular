@@ -10,7 +10,6 @@ from regular.basis import (
     APP_NAME,
     SMTP_SERVER,
     Config,
-    FileDirNames,
     JobResult,
     JobResultCompleted,
     JobResultError,
@@ -112,7 +111,7 @@ def notify_user_by_email(result: JobResult) -> None:
 def notify_user_if_necessary(
     job_dir: Path, *, config: Config, result: JobResult
 ) -> None:
-    notify = Notify.load(job_dir / FileDirNames.NOTIFY)
+    notify = Notify.load(job_dir)
 
     if notify != Notify.NEVER and (
         (isinstance(result, JobResultCompleted) and result.exit_status != 0)
