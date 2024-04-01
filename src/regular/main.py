@@ -88,9 +88,8 @@ def run_in_queue(queue_dir: Path, /, name: str) -> Iterator[None]:
                     # If the lock file exists,
                     # try to lock it ourselves in order to wait
                     # until others release it.
-                    with suppress(FileNotFoundError):  # noqa: SIM117
-                        with lock_file.open() as f:
-                            portalocker.lock(f, flags=portalocker.LOCK_SH)
+                    with suppress(FileNotFoundError), lock_file.open() as f:
+                        portalocker.lock(f, flags=portalocker.LOCK_SH)
 
                 seen_locks = seen_locks | locks
 
