@@ -26,6 +26,7 @@ from regular import (
 )
 from regular.basis import FileDirNames, Log, load_env, parse_env
 from regular.main import QUEUE_LOCK_WAIT
+from regular.notify import email_message, result_message_completed, result_message_error
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -434,3 +435,48 @@ class TestCLI:
         for i in range(2):
             entry = json.loads(out_log[i])
             assert "logs" not in entry
+
+
+class TestNotify:
+    def test_email_message(self) -> None:
+        email = email_message("Foo", "Lorem ipsum.")
+        assert re.search(r"Foo.*Lorem ipsum", str(email), re.DOTALL)
+
+    def test_result_message_completed_success(self) -> None:
+        title, text = result_message_completed(
+            JobResultCompleted(
+                name="bar",
+                exit_status=0,
+                stdout=stdout("Lorem ipsum."),
+                stderr=stderr(),
+            )
+        )
+
+        assert "bar" in title
+        assert text == "stderr:\n\nstdout:\nLorem ipsum."
+
+    def test_result_message_completed_failure(self) -> None:
+        title, text = result_message_completed(
+            JobResultCompleted(
+                name="bar",
+                exit_status=1,
+                stdout=stdout(),
+                stderr=stderr("Lorem ipsum."),
+            )
+        )
+
+        assert "bar" in title
+        assert text == "stderr:\nLorem ipsum.\nstdout:\n"
+
+    def test_result_message_error(self) -> None:
+        title, text = result_message_error(
+            JobResultError(
+                name="bar",
+                message="Barred.",
+                log="Barlog.",
+            )
+        )
+
+        assert "bar" in title
+        assert "Barred." in text
+        assert "Barlog." in text
