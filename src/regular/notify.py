@@ -38,8 +38,8 @@ def result_message_completed(result: JobResultCompleted) -> tuple[str, str]:
     content = Messages.RESULT_COMPLETED_TEXT.format(
         name=result.name,
         exit_status=result.exit_status,
-        stdout=result.stdout,
-        stderr=result.stderr,
+        stdout="\n".join(result.stdout.lines),
+        stderr="\n".join(result.stderr.lines),
     )
 
     return (title, content)
@@ -74,7 +74,7 @@ def email_message(subject: str, text: str) -> EmailMessage:
 def notify_user_by_email(result: JobResult) -> None:
     if isinstance(result, JobResultCompleted):
         title, text = result_message_completed(result)
-    if isinstance(result, JobResultError):
+    elif isinstance(result, JobResultError):
         title, text = result_message_error(result)
     else:
         return
