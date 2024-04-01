@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import getpass
 import smtplib
+from dataclasses import dataclass
 from email.message import EmailMessage
 from typing import TYPE_CHECKING
 
@@ -21,12 +22,38 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+@dataclass
+class ResultMessage:
+    pass
+
+
+@dataclass
+class ResultMessageEmpty(ResultMessage):
+    pass
+
+
+@dataclass
+class ResultMessageFull(ResultMessage):
+    title: str
+    text: str
+
+
 def notify_user(result: JobResult, *, config: Config) -> None:
     for notifier in config.notifiers:
         notifier(result)
 
 
-def result_message_completed(result: JobResultCompleted) -> tuple[str, str]:
+def result_message(result: JobResult) -> ResultMessage:
+    if isinstance(result, JobResultCompleted):
+        return result_message_completed(result)
+
+    if isinstance(result, JobResultError):
+        return result_message_error(result)
+
+    return ResultMessageEmpty()
+
+
+def result_message_completed(result: JobResultCompleted) -> ResultMessageFull:
     title_template = (
         Messages.RESULT_COMPLETED_TITLE_SUCCESS
         if result.exit_status == 0
@@ -42,10 +69,10 @@ def result_message_completed(result: JobResultCompleted) -> tuple[str, str]:
         stderr="\n".join(result.stderr.lines),
     )
 
-    return (title, content)
+    return ResultMessageFull(title, content)
 
 
-def result_message_error(result: JobResultError) -> tuple[str, str]:
+def result_message_error(result: JobResultError) -> ResultMessageFull:
     title = Messages.RESULT_ERROR_TITLE.format(
         name=result.name,
     )
@@ -56,7 +83,7 @@ def result_message_error(result: JobResultError) -> tuple[str, str]:
         message=result.message,
     )
 
-    return (title, text)
+    return ResultMessageFull(title, text)
 
 
 def email_message(subject: str, text: str) -> EmailMessage:
@@ -72,16 +99,13 @@ def email_message(subject: str, text: str) -> EmailMessage:
 
 
 def notify_user_by_email(result: JobResult) -> None:
-    if isinstance(result, JobResultCompleted):
-        title, text = result_message_completed(result)
-    elif isinstance(result, JobResultError):
-        title, text = result_message_error(result)
-    else:
+    res_msg = result_message(result)
+    if not isinstance(res_msg, ResultMessageFull):
         return
+    email_msg = email_message(res_msg.title, res_msg.text)
 
-    msg = email_message(title, text)
     smtp = smtplib.SMTP(SMTP_SERVER)
-    smtp.send_message(msg)
+    smtp.send_message(email_msg)
     smtp.quit()
 
 

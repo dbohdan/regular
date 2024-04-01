@@ -26,7 +26,13 @@ from regular import (
 )
 from regular.basis import FileDirNames, Log, load_env, parse_env
 from regular.main import QUEUE_LOCK_WAIT
-from regular.notify import email_message, result_message_completed, result_message_error
+from regular.notify import (
+    ResultMessageEmpty,
+    email_message,
+    result_message,
+    result_message_completed,
+    result_message_error,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -443,7 +449,7 @@ class TestNotify:
         assert re.search(r"Foo.*Lorem ipsum", str(email), re.DOTALL)
 
     def test_result_message_completed_success(self) -> None:
-        title, text = result_message_completed(
+        res_msg = result_message_completed(
             JobResultCompleted(
                 name="bar",
                 exit_status=0,
@@ -452,11 +458,11 @@ class TestNotify:
             )
         )
 
-        assert "bar" in title
-        assert text == "stderr:\n\nstdout:\nLorem ipsum."
+        assert "bar" in res_msg.title
+        assert res_msg.text == "stderr:\n\nstdout:\nLorem ipsum."
 
     def test_result_message_completed_failure(self) -> None:
-        title, text = result_message_completed(
+        res_msg = result_message_completed(
             JobResultCompleted(
                 name="bar",
                 exit_status=1,
@@ -465,11 +471,11 @@ class TestNotify:
             )
         )
 
-        assert "bar" in title
-        assert text == "stderr:\nLorem ipsum.\nstdout:\n"
+        assert "bar" in res_msg.title
+        assert res_msg.text == "stderr:\nLorem ipsum.\nstdout:\n"
 
     def test_result_message_error(self) -> None:
-        title, text = result_message_error(
+        res_msg = result_message_error(
             JobResultError(
                 name="bar",
                 message="Barred.",
@@ -477,6 +483,26 @@ class TestNotify:
             )
         )
 
-        assert "bar" in title
-        assert "Barred." in text
-        assert "Barlog." in text
+        assert "bar" in res_msg.title
+        assert "Barred." in res_msg.text
+        assert "Barlog." in res_msg.text
+
+    def test_result_message_completed(self) -> None:
+        completed = JobResultCompleted(
+            name="bar",
+            exit_status=0,
+            stdout=stdout(),
+            stderr=stderr(),
+        )
+        error = JobResultError(
+            name="bar",
+            message="",
+            log="",
+        )
+        locked = JobResultLocked(name="bar")
+        skipped = JobResultLocked(name="bar")
+
+        assert result_message(completed) == result_message_completed(completed)
+        assert result_message(error) == result_message_error(error)
+        assert isinstance(result_message(locked), ResultMessageEmpty)
+        assert isinstance(result_message(skipped), ResultMessageEmpty)
