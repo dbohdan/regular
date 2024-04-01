@@ -131,6 +131,15 @@ class TestSessionsAndJobs:
         assert len(results) == 10
         assert 2 < duration < 3
 
+    def test_session_disable(self, tmp_path) -> None:
+        config, _ = config_and_log("disable", tmp_path)
+
+        results_normal = run_session(config)
+        results_forced = run_session(config, force=True)
+
+        assert results_normal == [JobResultSkipped(name="bar")]
+        assert results_forced == [JobResultError(name="bar", message=ANY, log=ANY)]
+
     def test_session_env(self, tmp_path) -> None:
         config, _ = config_and_log("env", tmp_path)
         os_var = "<(***)>"

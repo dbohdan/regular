@@ -127,7 +127,7 @@ def run_job_no_lock_no_queue(
         msg = f"no job directory: {str(job.dir)!r}"
         raise FileNotFoundError(msg)
 
-    if not force and not job.is_due():
+    if not (force or job.enabled and job.is_due()):
         return JobResultSkipped(name=job.name)
 
     jitter_seconds = parse_duration(job.jitter).total_seconds()

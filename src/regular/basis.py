@@ -196,6 +196,7 @@ class EnvVars:
 
 class FileDirNames:
     DEFAULTS = "defaults"
+    DISABLE = "disable"
     ENV = "env"
     EXIT_STATUS = "exit-status"
     FILENAME = "filename"
@@ -273,6 +274,7 @@ class Notify(Enum):
 class Job:
     dir: Path
     env: Env
+    enabled: bool
     filename: str
     jitter: str
     name: str
@@ -294,6 +296,8 @@ class Job:
         if not name:
             name = cls.job_name(job_dir)
 
+        enabled = not (job_dir / FileDirNames.DISABLE).exists()
+
         env = load_env(job_dir / FileDirNames.ENV, subst_env=dict(os.environ))
 
         filename = read_text_or_default(
@@ -312,6 +316,7 @@ class Job:
 
         return cls(
             dir=job_dir,
+            enabled=enabled,
             env=env,
             filename=filename,
             jitter=jitter,
