@@ -165,13 +165,11 @@ def available_jobs(config_dir: Path, /) -> list[Path]:
     ]
 
 
-def select_jobs(
-    config_dir: Path, /, job_name_filter: list[str] | None = None
-) -> list[Path]:
+def select_jobs(config_dir: Path, /, job_names: list[str] | None = None) -> list[Path]:
     return (
         available_jobs(config_dir)
-        if job_name_filter is None
-        else [config_dir / job_name for job_name in job_name_filter]
+        if job_names is None
+        else [config_dir / job_name for job_name in job_names]
     )
 
 
@@ -206,7 +204,7 @@ def local_datetime(timestamp: float) -> datetime:
 
 
 def run_session(
-    config: Config, *, force: bool = False, job_name_filter: list[str] | None = None
+    config: Config, *, force: bool = False, job_names: list[str] | None = None
 ) -> list[JobResult]:
     def run_job_with_config(job_dir: Path) -> JobResult:
         try:
@@ -225,7 +223,7 @@ def run_session(
 
         return result
 
-    job_dirs_to_run = select_jobs(config.config_root, job_name_filter)
+    job_dirs_to_run = select_jobs(config.config_root, job_names)
 
     with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
         return list(executor.map(run_job_with_config, job_dirs_to_run))
@@ -361,12 +359,12 @@ def is_running(job_state_dir: Path, /) -> bool:
 def cli_command_status(
     config: Config,
     *,
-    job_name_filter: list[str] | None = None,
+    job_names: list[str] | None = None,
     json_lines: bool = False,
     log_lines: int = -1,
     print_func: Callable[[str], None] = print,
 ) -> None:
-    job_dirs = select_jobs(config.config_root, job_name_filter)
+    job_dirs = select_jobs(config.config_root, job_names)
 
     columns, _ = shutil.get_terminal_size()
     ruler = columns * "-"
@@ -469,13 +467,11 @@ def main() -> None:
     if args.subcommand == "list":
         cli_command_list(config, json_lines=args.json_lines)
     elif args.subcommand == "run":
-        run_session(
-            config, force=args.force, job_name_filter=None if args.all else args.jobs
-        )
+        run_session(config, force=args.force, job_names=None if args.all else args.jobs)
     elif args.subcommand == "status":
         cli_command_status(
             config,
-            job_name_filter=args.jobs or None,
+            job_names=args.jobs or None,
             json_lines=args.json_lines,
             log_lines=args.log_lines,
         )
