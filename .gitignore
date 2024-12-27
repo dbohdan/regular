@@ -1,10 +1,12 @@
 *.pyc
-__pycache__
+*.swp
+__pycache__/
 
-/.*_cache
-/.nox
+/.*_cache/
+/.nox/
 /.python-version
-/.tox
-/attic
-/build
-/dist
+/.tox/
+/attic/
+/build/
+/dist/
+/rewrite/regular
