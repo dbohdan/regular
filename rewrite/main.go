@@ -23,6 +23,8 @@ const (
 
 	enabledVar   = "enabled"
 	shouldRunVar = "should_run"
+
+	debounceInterval = 100 * time.Millisecond
 )
 
 var (
@@ -169,7 +171,7 @@ func (j Jobs) remove(name string) error {
 }
 
 func (j Jobs) watchChanges(watcher *fsnotify.Watcher) {
-	debounced := debounce.New(100 * time.Millisecond)
+	debounced := debounce.New(debounceInterval)
 
 	for {
 		select {
@@ -179,12 +181,15 @@ func (j Jobs) watchChanges(watcher *fsnotify.Watcher) {
 				return
 			}
 
-			jobName := jobNameFromPath(event.Name)
+			eventPath := event.Name
 
-			handleUpdate := func() {
-				res, err := j.update(event.Name)
+			handleUpdate := func(updatePath string) {
+				jobName := jobNameFromPath(updatePath)
+
+				res, err := j.update(updatePath)
 				if err != nil {
 					removeErr := j.remove(jobName)
+
 					if removeErr == nil {
 						logJobPrintf(jobName, "Job removed after update error: %v", err)
 					} else {
@@ -204,19 +209,30 @@ func (j Jobs) watchChanges(watcher *fsnotify.Watcher) {
 				}
 			}
 
-			if filepath.Base(event.Name) == jobFileName {
-				jobName := jobNameFromPath(event.Name)
+			if filepath.Base(eventPath) == jobFileName {
+				jobName := jobNameFromPath(eventPath)
 
-				if event.Has(fsnotify.Create) {
-					handleUpdate()
-				} else if event.Has(fsnotify.Write) {
-					debounced(handleUpdate)
+				if event.Has(fsnotify.Write) {
+					debounced(func() {
+						handleUpdate(eventPath)
+					})
 				} else if event.Has(fsnotify.Remove) {
 					err := j.remove(jobName)
 					if err == nil {
 						logJobPrintf(jobName, "Removed job")
 					} else {
 						logJobPrintf(jobName, "Failed to remove job: %v", err)
+					}
+				}
+			}
+
+			if event.Has(fsnotify.Create) {
+				if info, err := os.Stat(eventPath); err == nil && info.IsDir() {
+					watcher.Add(eventPath)
+
+					jobFilePath := filepath.Join(eventPath, jobFileName)
+					if _, err := os.Stat(jobFilePath); err == nil {
+						handleUpdate(jobFilePath)
 					}
 				}
 			}
