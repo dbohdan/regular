@@ -1,4 +1,4 @@
-module github.com/dbohdan/regular
+module dbohdan.com/regular
 
 go 1.22
 

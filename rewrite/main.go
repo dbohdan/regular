@@ -26,7 +26,7 @@ import (
 	"mvdan.cc/sh/v3/interp"
 	shsyntax "mvdan.cc/sh/v3/syntax"
 
-	"github.com/dbohdan/regular/starlarkutil"
+	"dbohdan.com/regular/starlarkutil"
 )
 
 const (

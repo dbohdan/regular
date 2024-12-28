@@ -3,7 +3,7 @@ package starlarkutil
 import (
 	"go.starlark.net/starlark"
 
-	"github.com/dbohdan/regular/shellquote"
+	"dbohdan.com/regular/shellquote"
 )
 
 func AddPredeclared(d starlark.StringDict) {
