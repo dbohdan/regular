@@ -10,6 +10,7 @@ import (
 
 	"github.com/adrg/xdg"
 	"github.com/bep/debounce"
+	"github.com/cornfeedhobo/pflag"
 	"github.com/fsnotify/fsnotify"
 	"github.com/mna/starstruct"
 	"go.starlark.net/starlark"
@@ -21,6 +22,11 @@ const (
 
 	enabledVar   = "enabled"
 	shouldRunVar = "should_run"
+)
+
+var (
+	defaultConfigRoot = filepath.Join(xdg.ConfigHome, dirName)
+	defaultStateRoot  = filepath.Join(xdg.StateHome, dirName)
 )
 
 func jobNameFromPath(path string) string {
@@ -88,6 +94,28 @@ func (writer logWriter) Write(bytes []byte) (int, error) {
 func logJobPrintf(job, format string, v ...any) {
 	values := append([]any{job}, v...)
 	log.Printf("[%s] "+format, values...)
+}
+
+func cli() Config {
+	configRoot := pflag.StringP("config", "c", defaultConfigRoot, "path to config directory")
+	stateRoot := pflag.StringP("state", "s", defaultStateRoot, "path to state directory")
+
+	pflag.Usage = func() {
+		fmt.Fprintf(
+			os.Stderr,
+			"Usage: %s [options]\n\nOptions:\n",
+			filepath.Base(os.Args[0]),
+		)
+
+		pflag.PrintDefaults()
+	}
+
+	pflag.Parse()
+
+	return Config{
+		ConfigRoot: *configRoot,
+		StateRoot:  *stateRoot,
+	}
 }
 
 func runJobs(jobs map[string]Job, jobsMu sync.RWMutex) {
@@ -211,10 +239,7 @@ func main() {
 	}
 	defer watcher.Close()
 
-	config := Config{
-		ConfigRoot: filepath.Join(xdg.ConfigHome, dirName),
-		StateRoot:  filepath.Join(xdg.StateHome, dirName),
-	}
+	config := cli()
 
 	err = filepath.Walk(config.ConfigRoot, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
