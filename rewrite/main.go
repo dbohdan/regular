@@ -155,6 +155,19 @@ func (j Jobs) update(path string) (updateJobsResult, error) {
 	return jobsAddedNew, nil
 }
 
+func (j Jobs) remove(name string) error {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+
+	_, exists := j.byName[name]
+	if !exists {
+		return fmt.Errorf("failed to find job to remove: %v", name)
+	}
+
+	delete(j.byName, name)
+	return nil
+}
+
 func (j Jobs) watchChanges(watcher *fsnotify.Watcher) {
 	debounced := debounce.New(100 * time.Millisecond)
 
@@ -171,7 +184,12 @@ func (j Jobs) watchChanges(watcher *fsnotify.Watcher) {
 			handleUpdate := func() {
 				res, err := j.update(event.Name)
 				if err != nil {
-					logJobPrintf(jobName, "Error updating job: %v", err)
+					removeErr := j.remove(jobName)
+					if removeErr == nil {
+						logJobPrintf(jobName, "Job removed after update error: %v", err)
+					} else {
+						logJobPrintf(jobName, "Failed to remove job after update error: %v", err)
+					}
 				}
 
 				switch res {
@@ -194,11 +212,12 @@ func (j Jobs) watchChanges(watcher *fsnotify.Watcher) {
 				} else if event.Has(fsnotify.Write) {
 					debounced(handleUpdate)
 				} else if event.Has(fsnotify.Remove) {
-					j.mu.Lock()
-					delete(j.byName, jobName)
-					j.mu.Unlock()
-
-					logJobPrintf(jobName, "Removed job")
+					err := j.remove(jobName)
+					if err == nil {
+						logJobPrintf(jobName, "Removed job")
+					} else {
+						logJobPrintf(jobName, "Failed to remove job: %v", err)
+					}
 				}
 			}
 
