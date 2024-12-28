@@ -11,12 +11,16 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/bep/debounce"
 	"github.com/fsnotify/fsnotify"
+	"github.com/mna/starstruct"
 	"go.starlark.net/starlark"
 )
 
 const (
 	dirName     = "regular"
 	jobFileName = "job.star"
+
+	enabledVar   = "enabled"
+	shouldRunVar = "should_run"
 )
 
 func jobNameFromPath(path string) string {
@@ -31,38 +35,17 @@ func loadJob(path string) (Job, error) {
 		return Job{}, err
 	}
 
-	shouldRun := globals["should_run"]
-	if shouldRun == nil {
-		return Job{}, fmt.Errorf(`missing "should_run" function`)
+	if _, ok := globals[enabledVar]; !ok {
+		globals[enabledVar] = starlark.True
 	}
 
-	job := Job{
-		Name:      jobNameFromPath(path),
-		Enabled:   true,
-		ShouldRun: shouldRun,
-	}
+	stringDict := starlark.StringDict(globals)
 
-	if v, ok := globals["enabled"]; ok {
-		if enabled, ok := v.(starlark.Bool); ok {
-			job.Enabled = bool(enabled)
-		}
+	var job Job
+	if err := starstruct.FromStarlark(stringDict, &job); err != nil {
+		return Job{}, fmt.Errorf(`failed to convert job dictionary: %w`, err)
 	}
-
-	if v, ok := globals["command"]; ok {
-		if cmd, ok := v.(*starlark.List); ok {
-			command := make([]string, 0, cmd.Len())
-			iter := cmd.Iterate()
-			defer iter.Done()
-
-			var x starlark.Value
-			for iter.Next(&x) {
-				if str, ok := x.(starlark.String); ok {
-					command = append(command, string(str))
-				}
-			}
-			job.Command = command
-		}
-	}
+	job.Jitter *= time.Second
 
 	return job, nil
 }

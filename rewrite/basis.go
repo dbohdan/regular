@@ -65,11 +65,11 @@ const (
 )
 
 type Job struct {
-	Command   []string
-	Enabled   bool
-	Env       Env
-	Jitter    time.Duration
-	Name      string
-	Queue     string
-	ShouldRun starlark.Value
+	Command   []string       `starlark:"command"`
+	Enabled   bool           `starlark:"enabled"`
+	Env       Env            `starlark:"env"`
+	Jitter    time.Duration  `starlark:"jitter"`
+	Name      string         `starlark:"name"`
+	Queue     string         `starlark:"queue"`
+	ShouldRun starlark.Value `starlark:"should_run"`
 }
