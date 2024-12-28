@@ -1,12 +1,40 @@
 package main
 
 import (
+	"strings"
 	"time"
 
 	"go.starlark.net/starlark"
 )
 
 type Env map[string]string
+
+func (e Env) Pairs() []string {
+	pairs := []string{}
+
+	for k, v := range e {
+		pairs = append(pairs, k+"="+v)
+	}
+
+	return pairs
+}
+
+func envFromPairs(pairs []string) Env {
+	env := make(Env)
+
+	for _, pair := range pairs {
+		split := strings.SplitN(pair, "=", 2)
+		key := split[0]
+		value := ""
+		if len(split) == 2 {
+			value = split[1]
+		}
+
+		env[key] = value
+	}
+
+	return env
+}
 
 type JobResult interface {
 	GetName() string
@@ -65,11 +93,12 @@ const (
 )
 
 type Job struct {
-	Command   []string       `starlark:"command"`
+	Dir       string         `starlark:"-"`
 	Enabled   bool           `starlark:"enabled"`
-	Env       Env            `starlark:"env"`
+	Env       Env            `starlark:"-"`
 	Jitter    time.Duration  `starlark:"jitter"`
 	Name      string         `starlark:"name"`
 	Queue     string         `starlark:"queue"`
+	Script    string         `starlark:"script"`
 	ShouldRun starlark.Value `starlark:"should_run"`
 }

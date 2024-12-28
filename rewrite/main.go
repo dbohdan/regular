@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,16 +16,24 @@ import (
 	"github.com/bep/debounce"
 	"github.com/cornfeedhobo/pflag"
 	"github.com/fsnotify/fsnotify"
+	"github.com/joho/godotenv"
 	"github.com/mna/starstruct"
+
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
+
+	"mvdan.cc/sh/v3/expand"
+	"mvdan.cc/sh/v3/interp"
+	shsyntax "mvdan.cc/sh/v3/syntax"
 )
 
 const (
 	dirName     = "regular"
+	envFileName = "env"
 	jobFileName = "job.star"
 
 	enabledVar   = "enabled"
+	envVar       = "env"
 	shouldRunVar = "should_run"
 
 	debounceInterval = 100 * time.Millisecond
@@ -32,37 +44,114 @@ var (
 	defaultStateRoot  = filepath.Join(xdg.StateHome, dirName)
 )
 
+func jobDir(path string) string {
+	return filepath.Dir(path)
+}
+
 func jobNameFromPath(path string) string {
 	return filepath.Base(filepath.Dir(path))
 }
 
-func loadJob(path string) (Job, error) {
+func loadEnv(startEnv Env, envPath ...string) (Env, error) {
+	loadedEnv, err := godotenv.Read(envPath...)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("failed to read env files: %w", err)
+	}
+
+	env := make(Env)
+	maps.Copy(env, startEnv)
+	maps.Copy(env, loadedEnv)
+
+	return env, nil
+}
+
+func loadJob(env Env, path string) (Job, error) {
 	thread := &starlark.Thread{Name: "job"}
+
+	job := Job{
+		Dir: jobDir(path),
+	}
+
+	envDict := starlark.NewDict(len(env))
+	for k, v := range env {
+		if err := envDict.SetKey(starlark.String(k), starlark.String(v)); err != nil {
+			return job, fmt.Errorf("failed to set env dict key: %w", err)
+		}
+	}
+
+	predeclared := starlark.StringDict{
+		enabledVar: starlark.True,
+		envVar:     envDict,
+	}
 
 	globals, err := starlark.ExecFileOptions(
 		&syntax.FileOptions{},
 		thread,
 		path,
 		nil,
-		nil,
+		predeclared,
 	)
 	if err != nil {
-		return Job{}, err
-	}
-
-	if _, ok := globals[enabledVar]; !ok {
-		globals[enabledVar] = starlark.True
+		return job, err
 	}
 
 	stringDict := starlark.StringDict(globals)
 
-	var job Job
 	if err := starstruct.FromStarlark(stringDict, &job); err != nil {
-		return Job{}, fmt.Errorf(`failed to convert job dictionary: %w`, err)
+		return job, fmt.Errorf(`failed to convert job to struct: %w`, err)
 	}
+
+	finalEnvDict := envDict
+	_, exists := globals[envVar]
+	if exists {
+		var ok bool
+		finalEnvDict, ok = globals[envVar].(*starlark.Dict)
+		if !ok {
+			return job, fmt.Errorf("%q isn't a dictionary", envVar)
+		}
+	}
+
+	job.Env = make(Env)
+	for _, item := range finalEnvDict.Items() {
+		key, ok := item.Index(0).(starlark.String)
+		if !ok {
+			return job, fmt.Errorf("%q key %v must be Starlark string", envVar, item.Index(0))
+		}
+
+		value, ok := item.Index(1).(starlark.String)
+		if !ok {
+			return job, fmt.Errorf("%q value %v must be Starlark string", envVar, item.Index(1))
+		}
+
+		job.Env[key.GoString()] = value.GoString()
+	}
+
+	job.Enabled = predeclared[enabledVar] == starlark.True
 	job.Jitter *= time.Second
 
 	return job, nil
+}
+
+func runScript(jobName string, env Env, script string) error {
+	parser := shsyntax.NewParser()
+
+	prog, err := parser.Parse(strings.NewReader(script), jobName)
+	if err != nil {
+		return fmt.Errorf("failed to parse shell script: %v", err)
+	}
+
+	runner, err := interp.New(
+		interp.Env(expand.ListEnviron(env.Pairs()...)),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create shell interpreter: %v", err)
+	}
+
+	if err := runner.Run(context.Background(), prog); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 type Jobs struct {
@@ -77,52 +166,64 @@ func newJobs() Jobs {
 	}
 }
 
+func (j Job) run() error {
+	if !j.Enabled {
+		return nil
+	}
+
+	now := time.Now()
+	args := starlark.Tuple{
+		starlark.MakeInt(now.Minute()),
+		starlark.MakeInt(now.Hour()),
+		starlark.MakeInt(now.Day()),
+		starlark.MakeInt(int(now.Month())),
+		starlark.MakeInt(int(now.Weekday())),
+	}
+
+	fn, ok := j.ShouldRun.(*starlark.Function)
+	if !ok {
+		return fmt.Errorf("%q is not a function", shouldRunVar)
+	}
+	args = args[:min(len(args), fn.NumParams())]
+
+	thread := &starlark.Thread{Name: "scheduler"}
+	result, err := starlark.Call(thread, j.ShouldRun, args, nil)
+	if err != nil {
+		return fmt.Errorf(`failed to call "should_run": %v`, err)
+	}
+
+	switch result {
+
+	case starlark.False:
+
+	case starlark.True:
+
+		if err := runScript(j.Name, j.Env, j.Script); err != nil {
+			return fmt.Errorf("script error: %v", err)
+		}
+
+	default:
+		return fmt.Errorf(`"should_run" returned bad value: %v`, result)
+	}
+
+	return nil
+}
+
 func (j Jobs) run() {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		now := time.Now()
-		thread := &starlark.Thread{Name: "scheduler"}
-
 		j.mu.RLock()
 
 		for name, job := range j.byName {
-			if !job.Enabled {
-				continue
+			logJobPrintf(name, "Running job")
+
+			if err := job.run(); err != nil {
+				logJobPrintf(name, "Error running job: %v", err)
 			}
 
-			args := starlark.Tuple{
-				starlark.MakeInt(now.Minute()),
-				starlark.MakeInt(now.Hour()),
-				starlark.MakeInt(now.Day()),
-				starlark.MakeInt(int(now.Month())),
-				starlark.MakeInt(int(now.Weekday())),
-			}
-
-			fn, ok := job.ShouldRun.(*starlark.Function)
-			if !ok {
-				logJobPrintf(name, "%q is not a function", shouldRunVar)
-				continue
-			}
-			args = args[:min(len(args), fn.NumParams())]
-
-			result, err := starlark.Call(thread, job.ShouldRun, args, nil)
-			if err != nil {
-				logJobPrintf(name, `Error calling "should_run": %v`, err)
-				continue
-			}
-
-			switch result {
-
-			case starlark.False:
-
-			case starlark.True:
-				logJobPrintf(name, "Running job")
-
-			default:
-				logJobPrintf(name, `"should_run" returned bad value: %v`, result)
-			}
+			logJobPrintf(name, "Finished job")
 		}
 
 		j.mu.RUnlock()
@@ -138,9 +239,16 @@ const (
 )
 
 func (j Jobs) update(path string) (updateJobsResult, error) {
+	jobDir := jobDir(path)
 	jobName := jobNameFromPath(path)
 
-	job, err := loadJob(path)
+	osEnv := envFromPairs(os.Environ())
+	env, err := loadEnv(osEnv, filepath.Join(jobDir, envFileName))
+	if err != nil {
+		return jobsNoChanges, fmt.Errorf("failed to load job env: %v", err)
+	}
+
+	job, err := loadJob(env, path)
 	if err != nil {
 		return jobsNoChanges, fmt.Errorf("failed to load job: %v", err)
 	}
@@ -228,7 +336,7 @@ func (j Jobs) watchChanges(watcher *fsnotify.Watcher) {
 
 			if event.Has(fsnotify.Create) {
 				if info, err := os.Stat(eventPath); err == nil && info.IsDir() {
-					watcher.Add(eventPath)
+					_ = watcher.Add(eventPath)
 
 					jobFilePath := filepath.Join(eventPath, jobFileName)
 					if _, err := os.Stat(jobFilePath); err == nil {
