@@ -107,13 +107,19 @@ func runJobs(jobs map[string]Job, jobsMu sync.RWMutex) {
 			}
 
 			args := starlark.Tuple{
-				starlark.MakeInt(now.Year()),
-				starlark.MakeInt(int(now.Month())),
-				starlark.MakeInt(now.Day()),
-				starlark.MakeInt(now.Hour()),
 				starlark.MakeInt(now.Minute()),
+				starlark.MakeInt(now.Hour()),
+				starlark.MakeInt(now.Day()),
+				starlark.MakeInt(int(now.Month())),
 				starlark.MakeInt(int(now.Weekday())),
 			}
+
+			fn, ok := job.ShouldRun.(*starlark.Function)
+			if !ok {
+				logJobPrintf(name, "%q is not a function", shouldRunVar)
+				continue
+			}
+			args = args[:min(len(args), fn.NumParams())]
 
 			result, err := starlark.Call(thread, job.ShouldRun, args, nil)
 			if err != nil {
