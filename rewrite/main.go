@@ -25,6 +25,8 @@ import (
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
 	shsyntax "mvdan.cc/sh/v3/syntax"
+
+	"github.com/dbohdan/regular/starlarkutil"
 )
 
 const (
@@ -83,6 +85,7 @@ func loadJob(env Env, path string) (Job, error) {
 		enabledVar: starlark.True,
 		envVar:     envDict,
 	}
+	starlarkutil.AddPredeclared(predeclared)
 
 	globals, err := starlark.ExecFileOptions(
 		&syntax.FileOptions{},
