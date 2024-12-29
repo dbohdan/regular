@@ -40,8 +40,6 @@ const (
 	envVar       = "env"
 	shouldRunVar = "should_run"
 
-	defaultQueue = "main"
-
 	debounceInterval = 100 * time.Millisecond
 	scheduleInterval = time.Second
 )
@@ -208,13 +206,25 @@ func newJobRunner(stateRoot string) jobRunner {
 	}
 }
 
+func (r jobRunner) lastCompleted(jobName string) *CompletedJob {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	jobCompleted, ok := r.completed[jobName]
+	if !ok || len(jobCompleted) == 0 {
+		return nil
+	}
+
+	return &jobCompleted[len(jobCompleted)-1]
+}
+
 func (r jobRunner) addJob(job JobConfig) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	queueName := job.Queue
 	if queueName == "" {
-		queueName = defaultQueue
+		queueName = job.Name
 	}
 
 	queue, ok := r.queues[queueName]
