@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/adrg/xdg"
 	"github.com/bep/debounce"
@@ -236,20 +238,20 @@ func (r jobRunner) addJob(job JobConfig) {
 	logJobPrintf(job.Name, "Put job in runner queue: %v", queueName)
 }
 
-func (r jobRunner) runQueueHead(queueName string) {
+func (r jobRunner) runQueueHead(queueName string) error {
 	if ok := r.mu.TryLock(); !ok {
-		return
+		return nil
 	}
 	defer r.mu.Unlock()
 
 	queue, ok := r.queues[queueName]
 	if !ok {
 		log.Printf("Requested to run head of nonexistent queue: %v", queueName)
-		return
+		return nil
 	}
 
 	if len(queue.jobs) == 0 {
-		return
+		return nil
 	}
 
 	job := queue.jobs[0]
@@ -265,14 +267,54 @@ func (r jobRunner) runQueueHead(queueName string) {
 		if status, ok := interp.IsExitStatus(err); ok {
 			completed.ExitStatus = int(status)
 		}
-		logJobPrintf(job.Name, "Script error: %v", err)
+
+		return newJobError(job.Name, fmt.Errorf("script error: %w", err))
 	}
 
 	logJobPrintf(job.Name, "Finished")
 	completed.Finished = time.Now()
+
+	return nil
 }
 
-func (r jobRunner) run() {
+// Wraps an error with a job name.
+type JobError struct {
+	JobName string
+	Err     error
+}
+
+func (e *JobError) Error() string {
+	return fmt.Sprintf("job %q: %v", e.JobName, e.Err)
+}
+
+func newJobError(jobName string, err error) *JobError {
+	return &JobError{JobName: jobName, Err: err}
+}
+
+func capitalizeFirst(s string) string {
+	if s == "" {
+		return s
+	}
+
+	r, size := utf8.DecodeRuneInString(s)
+	if r == utf8.RuneError {
+		return s
+	}
+
+	return string(unicode.ToUpper(r)) + s[size:]
+}
+
+func withLog(f func() error) {
+	if err := f(); err != nil {
+		if je, ok := err.(*JobError); ok {
+			logJobPrintf(je.JobName, "%v", capitalizeFirst(je.Err.Error()))
+		} else {
+			log.Printf("%v", err)
+		}
+	}
+}
+
+func (r jobRunner) run() error {
 	ticker := time.NewTicker(scheduleInterval)
 	defer ticker.Stop()
 
@@ -286,9 +328,13 @@ func (r jobRunner) run() {
 		r.mu.RUnlock()
 
 		for _, queueName := range names {
-			go r.runQueueHead(queueName)
+			if err := r.runQueueHead(queueName); err != nil {
+				return err
+			}
 		}
 	}
+
+	return nil
 }
 
 // This function doesn't lock the runner or the queues.
@@ -353,7 +399,7 @@ func (j JobConfig) schedule(runner jobRunner) error {
 	return nil
 }
 
-func (jst JobStore) schedule(runner jobRunner) {
+func (jst JobStore) schedule(runner jobRunner) error {
 	ticker := time.NewTicker(scheduleInterval)
 	defer ticker.Stop()
 
@@ -363,12 +409,13 @@ func (jst JobStore) schedule(runner jobRunner) {
 		for name, job := range jst.byName {
 			err := job.schedule(runner)
 			if err != nil {
-				logJobPrintf(name, "Error scheduling job: %v", err)
+				return newJobError(name, fmt.Errorf("scheduling error: %w", err))
 			}
 		}
 
 		jst.mu.RUnlock()
 	}
+	return nil
 }
 
 type updateJobsResult int
@@ -419,7 +466,7 @@ func (jst JobStore) remove(name string) error {
 	return nil
 }
 
-func (jst JobStore) watchChanges(watcher *fsnotify.Watcher) {
+func (jst JobStore) watchChanges(watcher *fsnotify.Watcher) error {
 	debounced := debounce.New(debounceInterval)
 
 	for {
@@ -427,7 +474,7 @@ func (jst JobStore) watchChanges(watcher *fsnotify.Watcher) {
 
 		case event, ok := <-watcher.Events:
 			if !ok {
-				return
+				return nil
 			}
 
 			eventPath := event.Name
@@ -488,10 +535,10 @@ func (jst JobStore) watchChanges(watcher *fsnotify.Watcher) {
 
 		case err, ok := <-watcher.Errors:
 			if !ok {
-				return
+				return nil
 			}
 
-			log.Printf("Watcher error: %v", err)
+			return fmt.Errorf("watcher error: %w", err)
 		}
 	}
 }
@@ -568,9 +615,13 @@ func main() {
 
 	runner := newJobRunner(config.StateRoot)
 
-	go jobs.schedule(runner)
-	go jobs.watchChanges(watcher)
-	go runner.run()
+	go withLog(func() error {
+		return jobs.schedule(runner)
+	})
+	go withLog(func() error {
+		return jobs.watchChanges(watcher)
+	})
+	go withLog(runner.run)
 
 	// Block forever.
 	<-make(chan struct{})
