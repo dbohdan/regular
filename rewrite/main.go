@@ -191,6 +191,7 @@ func newJobQueue() jobQueue {
 }
 
 type jobRunner struct {
+	completed map[string][]CompletedJob
 	queues    map[string]jobQueue
 	stateRoot string
 
@@ -199,6 +200,7 @@ type jobRunner struct {
 
 func newJobRunner(stateRoot string) jobRunner {
 	return jobRunner{
+		completed: make(map[string][]CompletedJob),
 		queues:    make(map[string]jobQueue),
 		stateRoot: stateRoot,
 
@@ -259,20 +261,28 @@ func (r jobRunner) runQueueHead(queueName string) error {
 	r.queues[queueName] = queue
 
 	logJobPrintf(job.Name, "Running job")
-	completed := CompletedJob{}
-	completed.Started = time.Now()
+	cj := CompletedJob{}
+	cj.Started = time.Now()
 
 	err := runScript(job.Name, job.Env, job.Script)
 	if err != nil {
 		if status, ok := interp.IsExitStatus(err); ok {
-			completed.ExitStatus = int(status)
+			cj.ExitStatus = int(status)
 		}
 
 		return newJobError(job.Name, fmt.Errorf("script error: %w", err))
 	}
 
 	logJobPrintf(job.Name, "Finished")
-	completed.Finished = time.Now()
+	cj.Finished = time.Now()
+
+	completed, ok := r.completed[job.Name]
+	if ok {
+		completed = append(completed, cj)
+	} else {
+		completed = []CompletedJob{cj}
+	}
+	r.completed[job.Name] = completed
 
 	return nil
 }
@@ -364,23 +374,47 @@ func (j JobConfig) schedule(runner jobRunner) error {
 		return nil
 	}
 
-	now := time.Now()
-	args := starlark.Tuple{
-		starlark.MakeInt(now.Minute()),
-		starlark.MakeInt(now.Hour()),
-		starlark.MakeInt(now.Day()),
-		starlark.MakeInt(int(now.Month())),
-		starlark.MakeInt(int(now.Weekday())),
+	lastCompleted := runner.lastCompleted(j.Name)
+
+	finished := -1
+	if lastCompleted != nil {
+		finished = int(lastCompleted.Finished.Unix())
 	}
 
-	fn, ok := j.ShouldRun.(*starlark.Function)
-	if !ok {
-		return fmt.Errorf("%q is not a function", shouldRunVar)
+	now := time.Now()
+	kvpairs := []starlark.Tuple{
+		starlark.Tuple{
+			starlark.String("minute"),
+			starlark.MakeInt(now.Minute()),
+		},
+		starlark.Tuple{
+			starlark.String("hour"),
+			starlark.MakeInt(now.Hour()),
+		},
+		starlark.Tuple{
+			starlark.String("day"),
+			starlark.MakeInt(now.Day()),
+		},
+		starlark.Tuple{
+			starlark.String("month"),
+			starlark.MakeInt(int(now.Month())),
+		},
+		starlark.Tuple{
+			starlark.String("dow"),
+			starlark.MakeInt(int(now.Weekday())),
+		},
+		starlark.Tuple{
+			starlark.String("timestamp"),
+			starlark.MakeInt(int(now.Unix())),
+		},
+		starlark.Tuple{
+			starlark.String("finished"),
+			starlark.MakeInt(finished),
+		},
 	}
-	args = args[:min(len(args), fn.NumParams())]
 
 	thread := &starlark.Thread{Name: "schedule"}
-	result, err := starlark.Call(thread, j.ShouldRun, args, nil)
+	result, err := starlark.Call(thread, j.ShouldRun, nil, kvpairs)
 	if err != nil {
 		return fmt.Errorf(`failed to call "should_run": %v`, err)
 	}
