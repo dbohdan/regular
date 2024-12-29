@@ -175,7 +175,8 @@ func newJobStore() JobStore {
 }
 
 type jobQueue struct {
-	jobs []JobConfig
+	activeJob bool
+	jobs      []JobConfig
 
 	mu *sync.RWMutex
 }
@@ -247,45 +248,55 @@ func (r jobRunner) addJob(job JobConfig) {
 	queue.jobs = append(queue.jobs, job)
 	r.queues[queueName] = queue
 
-	logJobPrintf(job.Name, "Put job in runner queue: %v", queueName)
+	logJobPrintf(
+		job.Name,
+		"Put job in runner queue of length %v: %v",
+		len(queue.jobs),
+		queueName,
+	)
 }
 
 func (r jobRunner) runQueueHead(queueName string) error {
-	if ok := r.mu.TryLock(); !ok {
-		return nil
-	}
-	defer r.mu.Unlock()
-
+	r.mu.RLock()
 	queue, ok := r.queues[queueName]
+	r.mu.RUnlock()
+
 	if !ok {
 		log.Printf("Requested to run head of nonexistent queue: %v", queueName)
 		return nil
 	}
 
-	if len(queue.jobs) == 0 {
+	if queue.activeJob || len(queue.jobs) == 0 {
 		return nil
 	}
 
+	queue.mu.Lock()
 	job := queue.jobs[0]
 	queue.jobs = queue.jobs[1:]
-	r.queues[queueName] = queue
+	queue.mu.Unlock()
 
-	logJobPrintf(job.Name, "Running job")
+	r.mu.Lock()
+	queue.activeJob = true
+	r.queues[queueName] = queue
+	r.mu.Unlock()
+
 	cj := CompletedJob{}
 	cj.Started = time.Now()
+	logJobPrintf(job.Name, "Started")
 
 	err := runScript(job.Name, job.Env, job.Script)
+	cj.Error = ""
 	if err != nil {
-		if status, ok := interp.IsExitStatus(err); ok {
-			cj.ExitStatus = int(status)
-		}
-
-		return newJobError(job.Name, fmt.Errorf("script error: %w", err))
+		cj.Error = err.Error()
+	}
+	if status, ok := interp.IsExitStatus(err); ok {
+		cj.ExitStatus = int(status)
 	}
 
 	logJobPrintf(job.Name, "Finished")
 	cj.Finished = time.Now()
 
+	r.mu.Lock()
 	completed, ok := r.completed[job.Name]
 	if ok {
 		completed = append(completed, cj)
@@ -293,6 +304,13 @@ func (r jobRunner) runQueueHead(queueName string) error {
 		completed = []CompletedJob{cj}
 	}
 	r.completed[job.Name] = completed
+
+	queue, ok = r.queues[queueName]
+	if ok {
+		queue.activeJob = false
+		r.queues[queueName] = queue
+	}
+	r.mu.Unlock()
 
 	return nil
 }
@@ -334,7 +352,7 @@ func withLog(f func() error) {
 	}
 }
 
-func (r jobRunner) run() error {
+func (r jobRunner) run() {
 	ticker := time.NewTicker(scheduleInterval)
 	defer ticker.Stop()
 
@@ -348,13 +366,11 @@ func (r jobRunner) run() error {
 		r.mu.RUnlock()
 
 		for _, queueName := range names {
-			if err := r.runQueueHead(queueName); err != nil {
-				return err
-			}
+			go withLog(func() error {
+				return r.runQueueHead(queueName)
+			})
 		}
 	}
-
-	return nil
 }
 
 // This function doesn't lock the runner or the queues.
@@ -665,7 +681,7 @@ func main() {
 	go withLog(func() error {
 		return jobs.watchChanges(watcher)
 	})
-	go withLog(runner.run)
+	go runner.run()
 
 	// Block forever.
 	<-make(chan struct{})

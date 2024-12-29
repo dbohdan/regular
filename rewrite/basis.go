@@ -105,6 +105,7 @@ type JobConfig struct {
 }
 
 type CompletedJob struct {
+	Error      string
 	ExitStatus int       `json:"exit_status"`
 	Started    time.Time `json:"started"`
 	Finished   time.Time `json:"finished"`
