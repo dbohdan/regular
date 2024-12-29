@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -92,13 +93,65 @@ const (
 	NotifyOnError Notify = "on error"
 )
 
-type Job struct {
-	Dir       string         `starlark:"-"`
-	Enabled   bool           `starlark:"enabled"`
-	Env       Env            `starlark:"-"`
-	Jitter    time.Duration  `starlark:"jitter"`
-	Name      string         `starlark:"name"`
-	Queue     string         `starlark:"queue"`
-	Script    string         `starlark:"script"`
-	ShouldRun starlark.Value `starlark:"should_run"`
+type JobConfig struct {
+	Duplicates bool           `starlark:"duplicates"`
+	Enabled    bool           `starlark:"enabled"`
+	Env        Env            `starlark:"-"`
+	Jitter     time.Duration  `starlark:"jitter"`
+	Name       string         `starlark:"-"`
+	Queue      string         `starlark:"queue"`
+	Script     string         `starlark:"script"`
+	ShouldRun  starlark.Value `starlark:"should_run"`
+}
+
+type CompletedJob struct {
+	ExitStatus int       `json:"exit_status"`
+	Started    time.Time `json:"started"`
+	Finished   time.Time `json:"finished"`
+	StdoutFile string    `json:"stdout"`
+	StderrFile string    `json:"stderr"`
+}
+
+func (cj CompletedJob) MarshalJSON() ([]byte, error) {
+	type Alias CompletedJob
+
+	return json.Marshal(&struct {
+		Started  string `json:"started"`
+		Finished string `json:"finished"`
+		*Alias
+	}{
+		Started:  cj.Started.Format(time.RFC3339),
+		Finished: cj.Finished.Format(time.RFC3339),
+		Alias:    (*Alias)(&cj),
+	})
+}
+
+func UnmarshalCompletedJob(data []byte) (CompletedJob, error) {
+	type Alias CompletedJob
+	var cj CompletedJob
+
+	stringTimes := &struct {
+		Started  string `json:"started"`
+		Finished string `json:"finished"`
+		*Alias
+	}{
+		Alias: (*Alias)(&cj),
+	}
+
+	var err error
+	if err = json.Unmarshal(data, &stringTimes); err != nil {
+		return cj, err
+	}
+
+	cj.Started, err = time.Parse(time.RFC3339, stringTimes.Started)
+	if err != nil {
+		return cj, err
+	}
+
+	cj.Finished, err = time.Parse(time.RFC3339, stringTimes.Finished)
+	if err != nil {
+		return cj, err
+	}
+
+	return cj, nil
 }

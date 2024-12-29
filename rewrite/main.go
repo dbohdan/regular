@@ -38,7 +38,10 @@ const (
 	envVar       = "env"
 	shouldRunVar = "should_run"
 
+	defaultQueue = "main"
+
 	debounceInterval = 100 * time.Millisecond
+	scheduleInterval = time.Second
 )
 
 var (
@@ -67,11 +70,11 @@ func loadEnv(startEnv Env, envPath ...string) (Env, error) {
 	return env, nil
 }
 
-func loadJob(env Env, path string) (Job, error) {
+func loadJob(env Env, path string) (JobConfig, error) {
 	thread := &starlark.Thread{Name: "job"}
 
-	job := Job{
-		Dir: jobDir(path),
+	job := JobConfig{
+		Name: jobNameFromPath(path),
 	}
 
 	envDict := starlark.NewDict(len(env))
@@ -143,33 +146,174 @@ func runScript(jobName string, env Env, script string) error {
 		return fmt.Errorf("failed to parse shell script: %v", err)
 	}
 
-	runner, err := interp.New(
+	interpreter, err := interp.New(
 		interp.Env(expand.ListEnviron(env.Pairs()...)),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create shell interpreter: %v", err)
 	}
 
-	if err := runner.Run(context.Background(), prog); err != nil {
+	if err := interpreter.Run(context.Background(), prog); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-type Jobs struct {
-	byName map[string]Job
-	mu     *sync.RWMutex
+type JobStore struct {
+	byName map[string]JobConfig
+
+	mu *sync.RWMutex
 }
 
-func newJobs() Jobs {
-	return Jobs{
-		byName: make(map[string]Job),
-		mu:     &sync.RWMutex{},
+func newJobStore() JobStore {
+	return JobStore{
+		byName: make(map[string]JobConfig),
+
+		mu: &sync.RWMutex{},
 	}
 }
 
-func (j Job) run() error {
+type jobQueue struct {
+	jobs []JobConfig
+
+	mu *sync.RWMutex
+}
+
+func newJobQueue() jobQueue {
+	return jobQueue{
+		jobs: []JobConfig{},
+
+		mu: &sync.RWMutex{},
+	}
+}
+
+type jobRunner struct {
+	queues    map[string]jobQueue
+	stateRoot string
+
+	mu *sync.RWMutex
+}
+
+func newJobRunner(stateRoot string) jobRunner {
+	return jobRunner{
+		queues:    make(map[string]jobQueue),
+		stateRoot: stateRoot,
+
+		mu: &sync.RWMutex{},
+	}
+}
+
+func (r jobRunner) addJob(job JobConfig) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	queueName := job.Queue
+	if queueName == "" {
+		queueName = defaultQueue
+	}
+
+	queue, ok := r.queues[queueName]
+	if !ok {
+		queue = newJobQueue()
+		r.queues[queueName] = queue
+	}
+
+	queue.mu.Lock()
+	defer queue.mu.Unlock()
+
+	if !job.Duplicates {
+		for _, otherJob := range queue.jobs {
+			if otherJob.Name == job.Name {
+				return
+			}
+		}
+	}
+
+	queue.jobs = append(queue.jobs, job)
+	r.queues[queueName] = queue
+
+	logJobPrintf(job.Name, "Put job in runner queue: %v", queueName)
+}
+
+func (r jobRunner) runQueueHead(queueName string) {
+	if ok := r.mu.TryLock(); !ok {
+		return
+	}
+	defer r.mu.Unlock()
+
+	queue, ok := r.queues[queueName]
+	if !ok {
+		log.Printf("Requested to run head of nonexistent queue: %v", queueName)
+		return
+	}
+
+	if len(queue.jobs) == 0 {
+		return
+	}
+
+	job := queue.jobs[0]
+	queue.jobs = queue.jobs[1:]
+	r.queues[queueName] = queue
+
+	logJobPrintf(job.Name, "Running job")
+	completed := CompletedJob{}
+	completed.Started = time.Now()
+
+	err := runScript(job.Name, job.Env, job.Script)
+	if err != nil {
+		if status, ok := interp.IsExitStatus(err); ok {
+			completed.ExitStatus = int(status)
+		}
+		logJobPrintf(job.Name, "Script error: %v", err)
+	}
+
+	logJobPrintf(job.Name, "Finished")
+	completed.Finished = time.Now()
+}
+
+func (r jobRunner) run() {
+	ticker := time.NewTicker(scheduleInterval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		names := []string{}
+
+		r.mu.RLock()
+		for queueName, _ := range r.queues {
+			names = append(names, queueName)
+		}
+		r.mu.RUnlock()
+
+		for _, queueName := range names {
+			go r.runQueueHead(queueName)
+		}
+	}
+}
+
+// This function doesn't lock the runner or the queues.
+// It is left to the caller.
+func (r jobRunner) summarize() string {
+	var sb strings.Builder
+
+	for queueName, queue := range r.queues {
+		sb.WriteString(queueName + ": ")
+
+		for i, job := range queue.jobs {
+			sb.WriteString(job.Name)
+
+			if i != len(queue.jobs)-1 {
+				sb.WriteString(", ")
+			}
+		}
+
+		sb.WriteString("\n")
+	}
+
+	return sb.String()
+}
+
+func (j JobConfig) schedule(runner jobRunner) error {
 	if !j.Enabled {
 		return nil
 	}
@@ -189,7 +333,7 @@ func (j Job) run() error {
 	}
 	args = args[:min(len(args), fn.NumParams())]
 
-	thread := &starlark.Thread{Name: "scheduler"}
+	thread := &starlark.Thread{Name: "schedule"}
 	result, err := starlark.Call(thread, j.ShouldRun, args, nil)
 	if err != nil {
 		return fmt.Errorf(`failed to call "should_run": %v`, err)
@@ -200,10 +344,7 @@ func (j Job) run() error {
 	case starlark.False:
 
 	case starlark.True:
-
-		if err := runScript(j.Name, j.Env, j.Script); err != nil {
-			return fmt.Errorf("script error: %v", err)
-		}
+		runner.addJob(j)
 
 	default:
 		return fmt.Errorf(`"should_run" returned bad value: %v`, result)
@@ -212,24 +353,21 @@ func (j Job) run() error {
 	return nil
 }
 
-func (j Jobs) run() {
-	ticker := time.NewTicker(time.Second)
+func (jst JobStore) schedule(runner jobRunner) {
+	ticker := time.NewTicker(scheduleInterval)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		j.mu.RLock()
+		jst.mu.RLock()
 
-		for name, job := range j.byName {
-			logJobPrintf(name, "Running job")
-
-			if err := job.run(); err != nil {
-				logJobPrintf(name, "Error running job: %v", err)
+		for name, job := range jst.byName {
+			err := job.schedule(runner)
+			if err != nil {
+				logJobPrintf(name, "Error scheduling job: %v", err)
 			}
-
-			logJobPrintf(name, "Finished job")
 		}
 
-		j.mu.RUnlock()
+		jst.mu.RUnlock()
 	}
 }
 
@@ -241,7 +379,7 @@ const (
 	jobsUpdated
 )
 
-func (j Jobs) update(path string) (updateJobsResult, error) {
+func (jst JobStore) update(path string) (updateJobsResult, error) {
 	jobDir := jobDir(path)
 	jobName := jobNameFromPath(path)
 
@@ -256,10 +394,10 @@ func (j Jobs) update(path string) (updateJobsResult, error) {
 		return jobsNoChanges, fmt.Errorf("failed to load job: %v", err)
 	}
 
-	j.mu.Lock()
-	_, exists := j.byName[jobName]
-	j.byName[jobName] = job
-	j.mu.Unlock()
+	jst.mu.Lock()
+	_, exists := jst.byName[jobName]
+	jst.byName[jobName] = job
+	jst.mu.Unlock()
 
 	if exists {
 		return jobsUpdated, nil
@@ -268,20 +406,20 @@ func (j Jobs) update(path string) (updateJobsResult, error) {
 	return jobsAddedNew, nil
 }
 
-func (j Jobs) remove(name string) error {
-	j.mu.Lock()
-	defer j.mu.Unlock()
+func (jst JobStore) remove(name string) error {
+	jst.mu.Lock()
+	defer jst.mu.Unlock()
 
-	_, exists := j.byName[name]
+	_, exists := jst.byName[name]
 	if !exists {
 		return fmt.Errorf("failed to find job to remove: %v", name)
 	}
 
-	delete(j.byName, name)
+	delete(jst.byName, name)
 	return nil
 }
 
-func (j Jobs) watchChanges(watcher *fsnotify.Watcher) {
+func (jst JobStore) watchChanges(watcher *fsnotify.Watcher) {
 	debounced := debounce.New(debounceInterval)
 
 	for {
@@ -297,9 +435,9 @@ func (j Jobs) watchChanges(watcher *fsnotify.Watcher) {
 			handleUpdate := func(updatePath string) {
 				jobName := jobNameFromPath(updatePath)
 
-				res, err := j.update(updatePath)
+				res, err := jst.update(updatePath)
 				if err != nil {
-					removeErr := j.remove(jobName)
+					removeErr := jst.remove(jobName)
 
 					if removeErr == nil {
 						logJobPrintf(jobName, "Job removed after update error: %v", err)
@@ -328,7 +466,7 @@ func (j Jobs) watchChanges(watcher *fsnotify.Watcher) {
 						handleUpdate(eventPath)
 					})
 				} else if event.Has(fsnotify.Remove) {
-					err := j.remove(jobName)
+					err := jst.remove(jobName)
 					if err == nil {
 						logJobPrintf(jobName, "Removed job")
 					} else {
@@ -393,7 +531,7 @@ func cli() Config {
 }
 
 func main() {
-	jobs := newJobs()
+	jobs := newJobStore()
 
 	log.SetFlags(0)
 	log.SetOutput(new(logWriter))
@@ -428,8 +566,11 @@ func main() {
 		log.Fatalf("Error walking config dir: %v", err)
 	}
 
-	go jobs.run()
+	runner := newJobRunner(config.StateRoot)
+
+	go jobs.schedule(runner)
 	go jobs.watchChanges(watcher)
+	go runner.run()
 
 	// Block forever.
 	<-make(chan struct{})
