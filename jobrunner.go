@@ -20,15 +20,17 @@ import (
 
 type jobRunner struct {
 	completed map[string][]CompletedJob
+	notify    notifyWhenDone
 	queues    map[string]jobQueue
 	stateRoot string
 
 	mu *sync.RWMutex
 }
 
-func newJobRunner(stateRoot string) jobRunner {
+func newJobRunner(notify notifyWhenDone, stateRoot string) jobRunner {
 	return jobRunner{
 		completed: make(map[string][]CompletedJob),
+		notify:    notify,
 		queues:    make(map[string]jobQueue),
 		stateRoot: stateRoot,
 
@@ -107,21 +109,22 @@ func (r jobRunner) runQueueHead(queueName string) error {
 	r.mu.Lock()
 	queue.activeJob = true
 	r.queues[queueName] = queue
+	jobStateDir := filepath.Join(r.stateRoot, job.Name)
 	r.mu.Unlock()
 
 	cj := CompletedJob{}
 	cj.Started = time.Now()
+	cj.StdoutFile = filepath.Join(jobStateDir, stdoutFileName)
+	cj.StderrFile = filepath.Join(jobStateDir, stderrFileName)
 	logJobPrintf(job.Name, "Started")
 
-	jobStateDir := filepath.Join(r.stateRoot, job.Name)
-
-	stdoutFile, err := os.OpenFile(
-		filepath.Join(jobStateDir, stdoutFileName),
+	stdoutFile, _ := os.OpenFile(
+		cj.StdoutFile,
 		os.O_RDWR|os.O_CREATE,
 		filePerms,
 	)
-	stderrFile, err := os.OpenFile(
-		filepath.Join(jobStateDir, stderrFileName),
+	stderrFile, _ := os.OpenFile(
+		cj.StderrFile,
 		os.O_RDWR|os.O_CREATE,
 		filePerms,
 	)
@@ -153,11 +156,16 @@ func (r jobRunner) runQueueHead(queueName string) error {
 		r.queues[queueName] = queue
 	}
 
-	err = cj.save(jobStateDir)
+	saveErr := cj.Save(jobStateDir)
+	notifyErr := notifyIfNeeded(r.notify, job.Notify, job.Name, cj)
 	r.mu.Unlock()
 
-	if err != nil {
-		return fmt.Errorf("failed to save completed job: %w", err)
+	if notifyErr != nil {
+		return fmt.Errorf("failed to notify about completed job: %w", notifyErr)
+	}
+
+	if saveErr != nil {
+		return fmt.Errorf("failed to save completed job: %w", saveErr)
 	}
 
 	if runErr != nil {

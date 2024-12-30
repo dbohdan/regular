@@ -18,6 +18,7 @@ type JobConfig struct {
 	Env        envfile.Env    `starlark:"-"`
 	Jitter     time.Duration  `starlark:"jitter"`
 	Name       string         `starlark:"-"`
+	Notify     notifyMode     `starlark:"-"`
 	Queue      string         `starlark:"queue"`
 	Script     string         `starlark:"script"`
 	ShouldRun  starlark.Value `starlark:"should_run"`
@@ -138,16 +139,29 @@ func loadJob(env envfile.Env, path string) (JobConfig, error) {
 	for _, item := range finalEnvDict.Items() {
 		key, ok := item.Index(0).(starlark.String)
 		if !ok {
-			return job, fmt.Errorf("%q key %v must be Starlark string", envVar, item.Index(0))
+			return job, fmt.Errorf("%q key %q must be Starlark string", envVar, item.Index(0))
 		}
 
 		value, ok := item.Index(1).(starlark.String)
 		if !ok {
-			return job, fmt.Errorf("%q value %v must be Starlark string", envVar, item.Index(1))
+			return job, fmt.Errorf("%q value %q isn't Starlark string", envVar, item.Index(1))
 		}
 
 		job.Env[key.GoString()] = value.GoString()
 	}
+
+	notifyModeString := ""
+	notifyModeValue, exists := globals[notifyModeVar]
+	if exists {
+		value, ok := notifyModeValue.(starlark.String)
+		if !ok {
+			return job, fmt.Errorf("%q must be Starlark string", notifyModeVar)
+		}
+
+		notifyModeString = value.GoString()
+	}
+
+	job.Notify, _ = parseNotifyMode(notifyModeString)
 
 	job.Enabled = predeclared[enabledVar] == starlark.True
 	job.Jitter *= time.Second

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -80,7 +81,7 @@ func main() {
 		}),
 		kong.Vars{
 			"defaultConfigRoot": defaultConfigRoot,
-			"defaultLogLines":   defaultLogLines,
+			"defaultLogLines":   strconv.Itoa(defaultLogLines),
 			"defaultStateRoot":  defaultStateRoot,
 		},
 	)

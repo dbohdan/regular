@@ -17,9 +17,10 @@ const (
 
 	jobDirEnvVar = "REGULAR_JOB_DIR"
 
-	enabledVar   = "enabled"
-	envVar       = "env"
-	shouldRunVar = "should_run"
+	enabledVar    = "enabled"
+	envVar        = "env"
+	notifyModeVar = "notify"
+	shouldRunVar  = "should_run"
 
 	redactedValue = "[redacted]"
 	secretRegexp  = "(?i)(key|password|secret|token)"
@@ -32,7 +33,7 @@ const (
 	debounceInterval = 100 * time.Millisecond
 	scheduleInterval = time.Second
 
-	defaultLogLines = "10"
+	defaultLogLines = 10
 )
 
 var (

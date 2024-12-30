@@ -9,12 +9,16 @@ import (
 )
 
 type CompletedJob struct {
-	Error      string
+	Error      string    `json:"error"`
 	ExitStatus int       `json:"exit_status"`
 	Started    time.Time `json:"started"`
 	Finished   time.Time `json:"finished"`
 	StdoutFile string    `json:"stdout"`
 	StderrFile string    `json:"stderr"`
+}
+
+func (cj CompletedJob) IsSuccess() bool {
+	return cj.ExitStatus == 0 && cj.Error == ""
 }
 
 func (cj CompletedJob) MarshalJSON() ([]byte, error) {
@@ -61,7 +65,7 @@ func UnmarshalCompletedJob(data []byte) (CompletedJob, error) {
 	return cj, nil
 }
 
-func (cj CompletedJob) save(jobStateDir string) error {
+func (cj CompletedJob) Save(jobStateDir string) error {
 	if err := os.MkdirAll(jobStateDir, dirPerms); err != nil {
 		return fmt.Errorf("failed to create state directory: %v", err)
 	}

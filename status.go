@@ -90,15 +90,15 @@ func (s *StatusCmd) Run(config Config) error {
 
 		stdoutTime, stdoutLines, err := tailLog(stdoutPath, s.LogLines)
 		if err != nil {
-			return fmt.Errorf("error reading stdout for %s: %w", name, err)
+			return fmt.Errorf("error reading stdout for %q: %w", name, err)
 		}
 
 		stderrTime, stderrLines, err := tailLog(stderrPath, s.LogLines)
 		if err != nil {
-			return fmt.Errorf("error reading stderr for %s: %w", name, err)
+			return fmt.Errorf("error reading stderr for %q: %w", name, err)
 		}
 
-		fmt.Println("        stdout.log:")
+		fmt.Println("        stdout:")
 		if !stdoutTime.IsZero() {
 			fmt.Println("            modified:", stdoutTime.Format(timestampFormat))
 			if len(stdoutLines) == 0 {
@@ -113,7 +113,7 @@ func (s *StatusCmd) Run(config Config) error {
 			}
 		}
 
-		fmt.Println("        stderr.log:")
+		fmt.Println("        stderr:")
 		if !stderrTime.IsZero() {
 			fmt.Println("            modified:", stderrTime.Format(timestampFormat))
 			if len(stderrLines) == 0 {
