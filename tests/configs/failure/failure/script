@@ -1,5 +1,0 @@
-#! /bin/sh
-
-echo failure
-echo nope > /dev/stderr
-exit 99

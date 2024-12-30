@@ -1,3 +1,0 @@
-#! /bin/sh
-
-echo "$IT_CAME_FROM_THE_OS"
