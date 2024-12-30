@@ -486,17 +486,21 @@ const (
 	jobsUpdated
 )
 
-func (jst JobStore) update(path string) (updateJobsResult, error) {
-	jobDir := jobDir(path)
-	jobName := jobNameFromPath(path)
+func (jst JobStore) update(configRoot, jobPath string) (updateJobsResult, error) {
+	jobDir := jobDir(jobPath)
+	jobName := jobNameFromPath(jobPath)
 
 	osEnv := envFromPairs(os.Environ())
-	env, err := loadEnv(osEnv, filepath.Join(jobDir, envFileName))
+	globalEnv, err := loadEnv(osEnv, filepath.Join(configRoot, envFileName))
+	if err != nil {
+		return jobsNoChanges, fmt.Errorf("failed to load global env: %v", err)
+	}
+	jobEnv, err := loadEnv(globalEnv, filepath.Join(jobDir, envFileName))
 	if err != nil {
 		return jobsNoChanges, fmt.Errorf("failed to load job env: %v", err)
 	}
 
-	job, err := loadJob(env, path)
+	job, err := loadJob(jobEnv, jobPath)
 	if err != nil {
 		return jobsNoChanges, fmt.Errorf("failed to load job: %v", err)
 	}
@@ -526,7 +530,7 @@ func (jst JobStore) remove(name string) error {
 	return nil
 }
 
-func (jst JobStore) watchChanges(watcher *fsnotify.Watcher) error {
+func (jst JobStore) watchChanges(configRoot string, watcher *fsnotify.Watcher) error {
 	debounced := debounce.New(debounceInterval)
 
 	for {
@@ -542,7 +546,7 @@ func (jst JobStore) watchChanges(watcher *fsnotify.Watcher) error {
 			handleUpdate := func(updatePath string) {
 				jobName := jobNameFromPath(updatePath)
 
-				res, err := jst.update(updatePath)
+				res, err := jst.update(configRoot, updatePath)
 				if err != nil {
 					removeErr := jst.remove(jobName)
 
@@ -661,7 +665,7 @@ func main() {
 		}
 
 		if filepath.Base(path) == jobFileName {
-			_, err := jobs.update(path)
+			_, err := jobs.update(config.ConfigRoot, path)
 			if err != nil {
 				logJobPrintf(jobNameFromPath(path), "Error at startup: %v", err)
 			}
@@ -679,7 +683,7 @@ func main() {
 		return jobs.schedule(runner)
 	})
 	go withLog(func() error {
-		return jobs.watchChanges(watcher)
+		return jobs.watchChanges(config.ConfigRoot, watcher)
 	})
 	go runner.run()
 
