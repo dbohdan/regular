@@ -16,8 +16,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/adrg/xdg"
+	"github.com/alecthomas/kong"
 	"github.com/bep/debounce"
-	"github.com/cornfeedhobo/pflag"
 	"github.com/fsnotify/fsnotify"
 	"github.com/joho/godotenv"
 	"github.com/mna/starstruct"
@@ -56,6 +56,27 @@ var (
 	defaultConfigRoot = filepath.Join(xdg.ConfigHome, dirName)
 	defaultStateRoot  = filepath.Join(xdg.StateHome, dirName)
 )
+
+type RunCmd struct{}
+
+type StatusCmd struct{}
+
+type CLI struct {
+	Run    RunCmd    `cmd:"" help:"Run scheduler"`
+	Status StatusCmd `cmd:"" help:"Show job status"`
+
+	ConfigRoot string `help:"Path to config directory" default:"${defaultConfigRoot}" type:"path"`
+	StateRoot  string `help:"Path to state directory" default:"${defaultStateRoot}" type:"path"`
+}
+
+func (r *RunCmd) Run(config Config) error {
+	return runService(config)
+}
+
+func (s *StatusCmd) Run() error {
+	// TODO: Implement the status command.
+	return fmt.Errorf("status command not yet implemented")
+}
 
 func jobDir(path string) string {
 	return filepath.Dir(path)
@@ -672,41 +693,14 @@ func logJobPrintf(job, format string, v ...any) {
 	log.Printf("[%s] "+format, values...)
 }
 
-func cli() Config {
-	configRoot := pflag.StringP("config", "c", defaultConfigRoot, "path to config directory")
-	stateRoot := pflag.StringP("state", "s", defaultStateRoot, "path to state directory")
-
-	pflag.Usage = func() {
-		fmt.Fprintf(
-			os.Stderr,
-			"Usage: %s [options]\n\nOptions:\n",
-			filepath.Base(os.Args[0]),
-		)
-
-		pflag.PrintDefaults()
-	}
-
-	pflag.Parse()
-
-	return Config{
-		ConfigRoot: *configRoot,
-		StateRoot:  *stateRoot,
-	}
-}
-
-func main() {
+func runService(config Config) error {
 	jobs := newJobStore()
-
-	log.SetFlags(0)
-	log.SetOutput(new(logWriter))
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("failed to create watcher: %w", err)
 	}
 	defer watcher.Close()
-
-	config := cli()
 
 	err = filepath.Walk(config.ConfigRoot, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -742,4 +736,40 @@ func main() {
 
 	// Block forever.
 	<-make(chan struct{})
+	return nil
+}
+
+func main() {
+	log.SetFlags(0)
+	log.SetOutput(new(logWriter))
+
+	cli := CLI{}
+	ctx := kong.Parse(&cli,
+		kong.Name("regular"),
+		kong.Description("Run regular jobs."),
+		kong.ConfigureHelp(kong.HelpOptions{
+			Compact: true,
+		}),
+		kong.Exit(func(code int) {
+			if code == 1 {
+				code = 2
+			}
+
+			os.Exit(code)
+		}),
+		kong.Vars{
+			"defaultConfigRoot": defaultConfigRoot,
+			"defaultStateRoot":  defaultStateRoot,
+		},
+	)
+
+	config := Config{
+		ConfigRoot: cli.ConfigRoot,
+		StateRoot:  cli.StateRoot,
+	}
+
+	err := ctx.Run(config)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
