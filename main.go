@@ -13,7 +13,9 @@ import (
 
 type RunCmd struct{}
 
-type StatusCmd struct{}
+type StatusCmd struct {
+	LogLines int `help:"Number of log lines to show" short:"l" default:"${defaultLogLines}"`
+}
 
 type CLI struct {
 	Run    RunCmd    `cmd:"" help:"Run scheduler"`
@@ -49,7 +51,7 @@ func withLog(f func() error) {
 type logWriter struct{}
 
 func (writer logWriter) Write(bytes []byte) (int, error) {
-	timestamp := time.Now().Format("2006-01-02 15:04:05 -0700")
+	timestamp := time.Now().Format(timestampFormat)
 	return fmt.Printf("[%s] %s", timestamp, string(bytes))
 }
 
@@ -78,6 +80,7 @@ func main() {
 		}),
 		kong.Vars{
 			"defaultConfigRoot": defaultConfigRoot,
+			"defaultLogLines":   defaultLogLines,
 			"defaultStateRoot":  defaultStateRoot,
 		},
 	)

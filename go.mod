@@ -8,16 +8,16 @@ require (
 	github.com/alecthomas/repr v0.4.0
 	github.com/bep/debounce v1.2.1
 	github.com/fsnotify/fsnotify v1.8.0
-	github.com/joho/godotenv v1.6.0-pre.2
 	github.com/mna/starstruct v0.0.0-20230205201804-e87b5f6cbd2d
+	github.com/nxadm/tail v1.4.11
 	go.starlark.net v0.0.0-20241226192728-8dfa5b98479f
-	mvdan.cc/sh v2.6.4+incompatible
+	golang.org/x/term v0.27.0
 	mvdan.cc/sh/v3 v3.10.0
 )
 
 require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	golang.org/x/sync v0.10.0 // indirect
-	golang.org/x/sys v0.26.0 // indirect
-	golang.org/x/term v0.25.0 // indirect
+	golang.org/x/sys v0.28.0 // indirect
+	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 )

@@ -14,6 +14,8 @@ import (
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
 	shsyntax "mvdan.cc/sh/v3/syntax"
+
+	"dbohdan.com/regular/envfile"
 )
 
 type jobRunner struct {
@@ -208,7 +210,7 @@ func (r jobRunner) summarize() string {
 	return sb.String()
 }
 
-func runScript(jobName string, env Env, script string, stdin io.Reader, stdout, stderr io.Writer) error {
+func runScript(jobName string, env envfile.Env, script string, stdin io.Reader, stdout, stderr io.Writer) error {
 	parser := shsyntax.NewParser()
 
 	prog, err := parser.Parse(strings.NewReader(script), jobName)
@@ -217,7 +219,7 @@ func runScript(jobName string, env Env, script string, stdin io.Reader, stdout, 
 	}
 
 	interpreter, err := interp.New(
-		interp.Env(expand.ListEnviron(env.Pairs()...)),
+		interp.Env(expand.ListEnviron(env.Strings()...)),
 		interp.StdIO(stdin, stdout, stderr),
 	)
 	if err != nil {

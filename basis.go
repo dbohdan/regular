@@ -15,16 +15,24 @@ const (
 	stderrFileName       = "stderr.log"
 	stdoutFileName       = "stdout.log"
 
-	dirPerms  = 0700
-	filePerms = 0600
+	jobDirEnvVar = "REGULAR_JOB_DIR"
 
 	enabledVar   = "enabled"
 	envVar       = "env"
-	jobDirEnvVar = "REGULAR_JOB_DIR"
 	shouldRunVar = "should_run"
+
+	redactedValue = "[redacted]"
+	secretRegexp  = "(?i)(key|password|secret|token)"
+
+	dirPerms  = 0700
+	filePerms = 0600
+
+	timestampFormat = "2006-01-02 15:04:05 -0700"
 
 	debounceInterval = 100 * time.Millisecond
 	scheduleInterval = time.Second
+
+	defaultLogLines = "10"
 )
 
 var (

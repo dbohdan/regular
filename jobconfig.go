@@ -4,16 +4,18 @@ import (
 	"fmt"
 	"time"
 
-	"dbohdan.com/regular/starlarkutil"
 	"github.com/mna/starstruct"
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
+
+	"dbohdan.com/regular/envfile"
+	"dbohdan.com/regular/starlarkutil"
 )
 
 type JobConfig struct {
 	Duplicates bool           `starlark:"duplicates"`
 	Enabled    bool           `starlark:"enabled"`
-	Env        Env            `starlark:"-"`
+	Env        envfile.Env    `starlark:"-"`
 	Jitter     time.Duration  `starlark:"jitter"`
 	Name       string         `starlark:"-"`
 	Queue      string         `starlark:"queue"`
@@ -85,7 +87,7 @@ func (j JobConfig) schedule(runner jobRunner) error {
 	return nil
 }
 
-func loadJob(env Env, path string) (JobConfig, error) {
+func loadJob(env envfile.Env, path string) (JobConfig, error) {
 	thread := &starlark.Thread{Name: "job"}
 
 	job := JobConfig{
@@ -132,7 +134,7 @@ func loadJob(env Env, path string) (JobConfig, error) {
 		}
 	}
 
-	job.Env = make(Env)
+	job.Env = make(envfile.Env)
 	for _, item := range finalEnvDict.Items() {
 		key, ok := item.Index(0).(starlark.String)
 		if !ok {

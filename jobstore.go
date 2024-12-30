@@ -9,6 +9,8 @@ import (
 
 	"github.com/bep/debounce"
 	"github.com/fsnotify/fsnotify"
+
+	"dbohdan.com/regular/envfile"
 )
 
 type JobStore struct {
@@ -56,19 +58,26 @@ func (jst JobStore) update(configRoot, jobPath string) (updateJobsResult, error)
 	jobDir := jobDir(jobPath)
 	jobName := jobNameFromPath(jobPath)
 
-	osEnv := envFromPairs(os.Environ())
-	globalEnv, err := loadEnv(osEnv, filepath.Join(configRoot, envFileName))
-	if err != nil {
-		return jobsNoChanges, fmt.Errorf("failed to load global env: %v", err)
-	}
-	jobEnv, err := loadEnv(globalEnv, filepath.Join(jobDir, envFileName))
-	if err != nil {
-		return jobsNoChanges, fmt.Errorf("failed to load job env: %v", err)
+	env := envfile.OS()
+	globalEnvPath := filepath.Join(configRoot, envFileName)
+	jobEnvPath := filepath.Join(jobDir, envFileName)
+
+	for _, envItem := range []struct {
+		name string
+		path string
+	}{
+		{name: "global", path: globalEnvPath},
+		{name: "job", path: jobEnvPath},
+	} {
+		newEnv, err := envfile.Load(envItem.path, true, env)
+		if err != nil {
+			return jobsNoChanges, fmt.Errorf("failed to load %s env file: %v", envItem.name, err)
+		}
+
+		env = envfile.Merge(env, newEnv)
 	}
 
-	jobEnv[jobDirEnvVar] = jobDir
-
-	job, err := loadJob(jobEnv, jobPath)
+	job, err := loadJob(env, jobPath)
 	if err != nil {
 		return jobsNoChanges, fmt.Errorf("failed to load job: %v", err)
 	}
