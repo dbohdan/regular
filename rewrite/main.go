@@ -38,6 +38,7 @@ const (
 
 	enabledVar   = "enabled"
 	envVar       = "env"
+	jobDirEnvVar = "REGULAR_JOB_DIR"
 	shouldRunVar = "should_run"
 
 	debounceInterval = 100 * time.Millisecond
@@ -499,6 +500,8 @@ func (jst JobStore) update(configRoot, jobPath string) (updateJobsResult, error)
 	if err != nil {
 		return jobsNoChanges, fmt.Errorf("failed to load job env: %v", err)
 	}
+
+	jobEnv[jobDirEnvVar] = jobDir
 
 	job, err := loadJob(jobEnv, jobPath)
 	if err != nil {
