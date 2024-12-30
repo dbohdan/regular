@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"maps"
 	"os"
@@ -32,9 +33,15 @@ import (
 )
 
 const (
-	dirName     = "regular"
-	envFileName = "env"
-	jobFileName = "job.star"
+	completedJobFileName = "completed.json"
+	dirName              = "regular"
+	envFileName          = "env"
+	jobFileName          = "job.star"
+	stderrFileName       = "stderr.log"
+	stdoutFileName       = "stdout.log"
+
+	dirPerms  = 0700
+	filePerms = 0600
 
 	enabledVar   = "enabled"
 	envVar       = "env"
@@ -139,7 +146,7 @@ func loadJob(env Env, path string) (JobConfig, error) {
 	return job, nil
 }
 
-func runScript(jobName string, env Env, script string) error {
+func runScript(jobName string, env Env, script string, stdin io.Reader, stdout, stderr io.Writer) error {
 	parser := shsyntax.NewParser()
 
 	prog, err := parser.Parse(strings.NewReader(script), jobName)
@@ -149,6 +156,7 @@ func runScript(jobName string, env Env, script string) error {
 
 	interpreter, err := interp.New(
 		interp.Env(expand.ListEnviron(env.Pairs()...)),
+		interp.StdIO(stdin, stdout, stderr),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create shell interpreter: %v", err)
@@ -257,6 +265,25 @@ func (r jobRunner) addJob(job JobConfig) {
 	)
 }
 
+func (cj CompletedJob) save(jobStateDir string) error {
+	if err := os.MkdirAll(jobStateDir, dirPerms); err != nil {
+		return fmt.Errorf("failed to create state directory: %v", err)
+	}
+
+	filename := filepath.Join(jobStateDir, completedJobFileName)
+
+	jsonData, err := cj.MarshalJSON()
+	if err != nil {
+		return fmt.Errorf("failed to marshal completed job: %v", err)
+	}
+
+	if err := os.WriteFile(filename, jsonData, filePerms); err != nil {
+		return fmt.Errorf("failed to write completed job data: %v", err)
+	}
+
+	return nil
+}
+
 func (r jobRunner) runQueueHead(queueName string) error {
 	r.mu.RLock()
 	queue, ok := r.queues[queueName]
@@ -285,12 +312,25 @@ func (r jobRunner) runQueueHead(queueName string) error {
 	cj.Started = time.Now()
 	logJobPrintf(job.Name, "Started")
 
-	err := runScript(job.Name, job.Env, job.Script)
+	jobStateDir := filepath.Join(r.stateRoot, job.Name)
+
+	stdoutFile, err := os.OpenFile(
+		filepath.Join(jobStateDir, stdoutFileName),
+		os.O_RDWR|os.O_CREATE,
+		filePerms,
+	)
+	stderrFile, err := os.OpenFile(
+		filepath.Join(jobStateDir, stderrFileName),
+		os.O_RDWR|os.O_CREATE,
+		filePerms,
+	)
+
+	runErr := runScript(job.Name, job.Env, job.Script, nil, stdoutFile, stderrFile)
 	cj.Error = ""
-	if err != nil {
-		cj.Error = err.Error()
+	if runErr != nil {
+		cj.Error = runErr.Error()
 	}
-	if status, ok := interp.IsExitStatus(err); ok {
+	if status, ok := interp.IsExitStatus(runErr); ok {
 		cj.ExitStatus = int(status)
 	}
 
@@ -311,7 +351,17 @@ func (r jobRunner) runQueueHead(queueName string) error {
 		queue.activeJob = false
 		r.queues[queueName] = queue
 	}
+
+	err = cj.save(jobStateDir)
 	r.mu.Unlock()
+
+	if err != nil {
+		return fmt.Errorf("failed to save completed job: %w", err)
+	}
+
+	if runErr != nil {
+		return fmt.Errorf("script failed: %w", runErr)
+	}
 
 	return nil
 }
