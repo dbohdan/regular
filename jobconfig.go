@@ -31,9 +31,13 @@ func (j JobConfig) schedule(runner jobRunner) error {
 
 	lastCompleted := runner.lastCompleted(j.Name)
 
+	exitStatus := -1
 	finished := -1
+	started := -1
 	if lastCompleted != nil {
+		exitStatus = lastCompleted.ExitStatus
 		finished = int(lastCompleted.Finished.Unix())
+		started = int(lastCompleted.Started.Unix())
 	}
 
 	now := time.Now()
@@ -63,8 +67,16 @@ func (j JobConfig) schedule(runner jobRunner) error {
 			starlark.MakeInt(int(now.Unix())),
 		},
 		starlark.Tuple{
+			starlark.String("exit_status"),
+			starlark.MakeInt(exitStatus),
+		},
+		starlark.Tuple{
 			starlark.String("finished"),
 			starlark.MakeInt(finished),
+		},
+		starlark.Tuple{
+			starlark.String("started"),
+			starlark.MakeInt(started),
 		},
 	}
 
@@ -105,6 +117,9 @@ func loadJob(env envfile.Env, path string) (JobConfig, error) {
 	predeclared := starlark.StringDict{
 		enabledVar: starlark.True,
 		envVar:     envDict,
+		oneDayVar:  starlark.MakeInt(24 * 60 * 60),
+		oneHourVar: starlark.MakeInt(60 * 60),
+		oneMinuteVar: starlark.MakeInt(60),
 	}
 	starlarkutil.AddPredeclared(predeclared)
 

@@ -20,6 +20,9 @@ const (
 	enabledVar    = "enabled"
 	envVar        = "env"
 	notifyModeVar = "notify"
+	oneDayVar     = "one_day"
+	oneHourVar    = "one_hour"
+	oneMinuteVar  = "one_minute"
 	shouldRunVar  = "should_run"
 
 	redactedValue = "[redacted]"
