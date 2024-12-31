@@ -176,7 +176,7 @@ func (r jobRunner) runQueueHead(queueName string) error {
 }
 
 func (r jobRunner) run() {
-	ticker := time.NewTicker(scheduleInterval)
+	ticker := time.NewTicker(runInterval)
 	defer ticker.Stop()
 
 	for range ticker.C {

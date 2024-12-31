@@ -34,7 +34,8 @@ const (
 	timestampFormat = "2006-01-02 15:04:05 -0700"
 
 	debounceInterval = 100 * time.Millisecond
-	scheduleInterval = time.Second
+	runInterval      = time.Second
+	scheduleInterval = time.Minute
 
 	defaultLogLines = 10
 )

@@ -35,22 +35,36 @@ func newJobStore() JobStore {
 	}
 }
 
+func (jst JobStore) scheduleOnce(runner jobRunner) error {
+	jst.mu.RLock()
+	defer jst.mu.RUnlock()
+
+	for name, job := range jst.byName {
+		err := job.schedule(runner)
+		if err != nil {
+			return newJobError(name, fmt.Errorf("scheduling error: %w", err))
+		}
+	}
+
+	return nil
+}
+
 func (jst JobStore) schedule(runner jobRunner) error {
 	ticker := time.NewTicker(scheduleInterval)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		jst.mu.RLock()
-
-		for name, job := range jst.byName {
-			err := job.schedule(runner)
-			if err != nil {
-				return newJobError(name, fmt.Errorf("scheduling error: %w", err))
-			}
-		}
-
-		jst.mu.RUnlock()
+	err := jst.scheduleOnce(runner)
+	if err != nil {
+		return err
 	}
+
+	for range ticker.C {
+		err := jst.scheduleOnce(runner)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
