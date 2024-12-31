@@ -118,16 +118,20 @@ func (r jobRunner) runQueueHead(queueName string) error {
 	cj.StderrFile = filepath.Join(jobStateDir, stderrFileName)
 	logJobPrintf(job.Name, "Started")
 
-	stdoutFile, _ := os.OpenFile(
-		cj.StdoutFile,
-		os.O_RDWR|os.O_CREATE,
-		filePerms,
-	)
-	stderrFile, _ := os.OpenFile(
-		cj.StderrFile,
-		os.O_RDWR|os.O_CREATE,
-		filePerms,
-	)
+	var stdoutFile io.Writer
+	var stderrFile io.Writer
+	if job.Log {
+		stdoutFile, _ = os.OpenFile(
+			cj.StdoutFile,
+			os.O_RDWR|os.O_CREATE,
+			filePerms,
+		)
+		stderrFile, _ = os.OpenFile(
+			cj.StderrFile,
+			os.O_RDWR|os.O_CREATE,
+			filePerms,
+		)
+	}
 
 	runErr := runScript(job.Name, job.Env, job.Script, nil, stdoutFile, stderrFile)
 	cj.Error = ""

@@ -17,6 +17,7 @@ type JobConfig struct {
 	Enabled    bool           `starlark:"enabled"`
 	Env        envfile.Env    `starlark:"-"`
 	Jitter     time.Duration  `starlark:"jitter"`
+	Log        bool           `starlark:"log"`
 	Name       string         `starlark:"-"`
 	Notify     notifyMode     `starlark:"-"`
 	Queue      string         `starlark:"queue"`
