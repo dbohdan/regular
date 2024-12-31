@@ -18,7 +18,7 @@ func (s *StatusCmd) Run(config Config) error {
 	width := getTermWidth()
 	separator := strings.Repeat("-", width)
 
-	jobs := newJobStore()
+	jobs := newJobScheduler()
 
 	err := filepath.Walk(config.ConfigRoot, func(path string, info os.FileInfo, err error) error {
 		if err != nil {

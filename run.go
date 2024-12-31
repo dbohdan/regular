@@ -14,7 +14,7 @@ func (r *RunCmd) Run(config Config) error {
 }
 
 func runService(config Config) error {
-	jobs := newJobStore()
+	jobs := newJobScheduler()
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {

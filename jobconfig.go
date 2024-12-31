@@ -115,10 +115,10 @@ func loadJob(env envfile.Env, path string) (JobConfig, error) {
 	}
 
 	predeclared := starlark.StringDict{
-		enabledVar: starlark.True,
-		envVar:     envDict,
-		oneDayVar:  starlark.MakeInt(24 * 60 * 60),
-		oneHourVar: starlark.MakeInt(60 * 60),
+		enabledVar:   starlark.True,
+		envVar:       envDict,
+		oneDayVar:    starlark.MakeInt(24 * 60 * 60),
+		oneHourVar:   starlark.MakeInt(60 * 60),
 		oneMinuteVar: starlark.MakeInt(60),
 	}
 	starlarkutil.AddPredeclared(predeclared)

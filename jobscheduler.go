@@ -13,7 +13,7 @@ import (
 	"dbohdan.com/regular/envfile"
 )
 
-type JobStore struct {
+type jobScheduler struct {
 	byName map[string]JobConfig
 
 	mu *sync.RWMutex
@@ -27,15 +27,15 @@ const (
 	jobsUpdated
 )
 
-func newJobStore() JobStore {
-	return JobStore{
+func newJobScheduler() jobScheduler {
+	return jobScheduler{
 		byName: make(map[string]JobConfig),
 
 		mu: &sync.RWMutex{},
 	}
 }
 
-func (jst JobStore) scheduleOnce(runner jobRunner) error {
+func (jst jobScheduler) scheduleOnce(runner jobRunner) error {
 	jst.mu.RLock()
 	defer jst.mu.RUnlock()
 
@@ -49,7 +49,7 @@ func (jst JobStore) scheduleOnce(runner jobRunner) error {
 	return nil
 }
 
-func (jst JobStore) schedule(runner jobRunner) error {
+func (jst jobScheduler) schedule(runner jobRunner) error {
 	ticker := time.NewTicker(scheduleInterval)
 	defer ticker.Stop()
 
@@ -68,7 +68,7 @@ func (jst JobStore) schedule(runner jobRunner) error {
 	return nil
 }
 
-func (jst JobStore) update(configRoot, jobPath string) (updateJobsResult, error) {
+func (jst jobScheduler) update(configRoot, jobPath string) (updateJobsResult, error) {
 	jobDir := jobDir(jobPath)
 	jobName := jobNameFromPath(jobPath)
 
@@ -108,7 +108,7 @@ func (jst JobStore) update(configRoot, jobPath string) (updateJobsResult, error)
 	return jobsAddedNew, nil
 }
 
-func (jst JobStore) remove(name string) error {
+func (jst jobScheduler) remove(name string) error {
 	jst.mu.Lock()
 	defer jst.mu.Unlock()
 
@@ -121,7 +121,7 @@ func (jst JobStore) remove(name string) error {
 	return nil
 }
 
-func (jst JobStore) watchChanges(configRoot string, watcher *fsnotify.Watcher) error {
+func (jst jobScheduler) watchChanges(configRoot string, watcher *fsnotify.Watcher) error {
 	debounced := debounce.New(debounceInterval)
 
 	for {
