@@ -67,11 +67,21 @@ func withLog(f func() error) {
 	}
 }
 
-type logWriter struct{}
+type logWriter struct {
+	db *appDB
+}
 
-func (writer logWriter) Write(bytes []byte) (int, error) {
-	timestamp := time.Now().Format(timestampFormat)
-	return fmt.Printf("[%s] %s", timestamp, string(bytes))
+func (writer *logWriter) Write(bytes []byte) (int, error) {
+	timestamp := time.Now()
+	formattedMsg := fmt.Sprintf("[%s] %s", timestamp.Format(timestampFormat), string(bytes))
+
+	if writer.db != nil {
+		if err := writer.db.saveAppLog(timestamp, formattedMsg); err != nil {
+			return 0, fmt.Errorf("failed to save app log: %v\n", err)
+		}
+	}
+
+	return fmt.Print(formattedMsg)
 }
 
 func logJobPrintf(job, format string, v ...any) {
@@ -81,7 +91,15 @@ func logJobPrintf(job, format string, v ...any) {
 
 func main() {
 	log.SetFlags(0)
-	log.SetOutput(new(logWriter))
+
+	db, err := openAppDB(defaultStateRoot)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to open app database: %v\n", err)
+		os.Exit(1)
+	}
+	defer db.close()
+
+	log.SetOutput(&logWriter{db: db})
 
 	cli := CLI{}
 	ctx := kong.Parse(&cli,
@@ -109,7 +127,7 @@ func main() {
 		StateRoot:  cli.StateRoot,
 	}
 
-	err := ctx.Run(config)
+	err = ctx.Run(config)
 	if err != nil {
 		log.Fatal(err)
 	}

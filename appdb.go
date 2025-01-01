@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -65,6 +66,13 @@ func createSchema(db *sql.DB) error {
 		);
 
 		CREATE INDEX IF NOT EXISTS idx_job_logs_completed_job_id ON job_logs(completed_job_id);
+
+		CREATE TABLE IF NOT EXISTS app_log (
+			id INTEGER PRIMARY KEY,
+			timestamp DATETIME NOT NULL,
+			message TEXT NOT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
 	`)
 
 	return err
@@ -177,6 +185,49 @@ func (c *appDB) getLastCompleted(jobName string) (*CompletedJob, error) {
 	}
 
 	return &completed, nil
+}
+
+func (c *appDB) saveAppLog(timestamp time.Time, message string) error {
+	_, err := c.db.Exec(`
+		INSERT INTO app_log (
+			timestamp,
+			message
+		) VALUES (?, ?)`,
+		timestamp,
+		message,
+	)
+	return err
+}
+
+func (c *appDB) getAppLog(limit int) ([]string, error) {
+	rows, err := c.db.Query(`
+		SELECT message
+		FROM (
+			SELECT id, message
+			FROM app_log
+			ORDER BY id DESC
+			LIMIT ?
+		)
+		ORDER BY id ASC`,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var lines []string
+	for rows.Next() {
+		var line string
+
+		if err := rows.Scan(&line); err != nil {
+			return nil, err
+		}
+
+		lines = append(lines, line)
+	}
+
+	return lines, rows.Err()
 }
 
 func (c *appDB) getJobLogs(jobName string, logName string, limit int) ([]string, error) {
