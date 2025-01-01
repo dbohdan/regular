@@ -91,6 +91,8 @@ func (jst jobScheduler) update(configRoot, jobPath string) (updateJobsResult, er
 		env = envfile.Merge(env, newEnv)
 	}
 
+	env[jobDirEnvVar] = jobDir
+
 	job, err := loadJob(env, jobPath)
 	if err != nil {
 		return jobsNoChanges, fmt.Errorf("failed to load job: %v", err)
