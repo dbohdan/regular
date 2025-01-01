@@ -9,8 +9,6 @@ type CompletedJob struct {
 	ExitStatus int
 	Started    time.Time
 	Finished   time.Time
-	StdoutFile string
-	StderrFile string
 }
 
 func (cj CompletedJob) IsSuccess() bool {

@@ -110,20 +110,21 @@ func (r jobRunner) runQueueHead(queueName string) error {
 
 	cj := CompletedJob{}
 	cj.Started = time.Now()
-	cj.StdoutFile = filepath.Join(jobStateDir, stdoutFileName)
-	cj.StderrFile = filepath.Join(jobStateDir, stderrFileName)
 	logJobPrintf(job.Name, "Started")
+
+	stdoutFilePath := filepath.Join(jobStateDir, stdoutFileName)
+	stderrFilePath := filepath.Join(jobStateDir, stderrFileName)
 
 	var stdoutFile io.Writer
 	var stderrFile io.Writer
 	if job.Log {
 		stdoutFile, _ = os.OpenFile(
-			cj.StdoutFile,
+			stdoutFilePath,
 			os.O_CREATE|os.O_TRUNC|os.O_WRONLY,
 			filePerms,
 		)
 		stderrFile, _ = os.OpenFile(
-			cj.StderrFile,
+			stderrFilePath,
 			os.O_CREATE|os.O_TRUNC|os.O_WRONLY,
 			filePerms,
 		)
@@ -148,7 +149,10 @@ func (r jobRunner) runQueueHead(queueName string) error {
 		r.queues[queueName] = queue
 	}
 
-	saveErr := r.db.saveCompletedJob(job.Name, cj)
+	saveErr := r.db.saveCompletedJob(job.Name, cj, []logFile{
+		{name: "stdout", path: stdoutFilePath},
+		{name: "stderr", path: stderrFilePath},
+	})
 	notifyErr := notifyIfNeeded(r.notify, job.Notify, job.Name, cj)
 	r.mu.Unlock()
 

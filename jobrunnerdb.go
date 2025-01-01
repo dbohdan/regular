@@ -70,7 +70,7 @@ func createSchema(db *sql.DB) error {
 	return err
 }
 
-func (c *jobRunnerDB) saveCompletedJob(jobName string, completed CompletedJob) error {
+func (c *jobRunnerDB) saveCompletedJob(jobName string, completed CompletedJob, logs []logFile) error {
 	tx, err := c.db.Begin()
 	if err != nil {
 		return err
@@ -102,13 +102,7 @@ func (c *jobRunnerDB) saveCompletedJob(jobName string, completed CompletedJob) e
 		return err
 	}
 
-	for _, logFile := range []struct {
-		name string
-		path string
-	}{
-		{"stdout", completed.StdoutFile},
-		{"stderr", completed.StderrFile},
-	} {
+	for _, logFile := range logs {
 		if err := c.saveLogFile(tx, jobID, logFile.name, logFile.path); err != nil {
 			return err
 		}
