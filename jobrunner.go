@@ -99,7 +99,6 @@ func (r jobRunner) runQueueHead(queueName string) error {
 
 	queue.mu.Lock()
 	job := queue.jobs[0]
-	queue.jobs = queue.jobs[1:]
 	queue.mu.Unlock()
 
 	r.mu.Lock()
@@ -146,6 +145,7 @@ func (r jobRunner) runQueueHead(queueName string) error {
 	queue, ok = r.queues[queueName]
 	if ok {
 		queue.activeJob = false
+		queue.jobs = queue.jobs[1:]
 		r.queues[queueName] = queue
 	}
 
