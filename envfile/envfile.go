@@ -3,6 +3,7 @@ package envfile
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"regexp"
@@ -38,9 +39,9 @@ func EnvFromStrings(strs []string) Env {
 	return env
 }
 
-// `Parse` parses the contents of an env file content and returns the variables as a map.
+// `Parse` reads environment variables from a reader and returns them as a map.
 // If `subst` is true, it substitutes variables from the same env file and `substEnv`.
-func Parse(envText string, subst bool, substEnv Env) (Env, error) {
+func Parse(r io.Reader, subst bool, substEnv Env) (Env, error) {
 	if substEnv == nil {
 		substEnv = make(Env)
 	}
@@ -61,18 +62,27 @@ func Parse(envText string, subst bool, substEnv Env) (Env, error) {
 	re := regexp.MustCompile(`\$\{([^}=]+)\}`)
 
 	replacement := func(value string) (string, error) {
-		return re.ReplaceAllStringFunc(value, func(match string) string {
+		var lastErr error
+
+		result := re.ReplaceAllStringFunc(value, func(match string) string {
 			varName := re.FindStringSubmatch(match)[1]
+
 			subValue, err := lookupEnv(varName)
 			if err != nil {
-				// Panics will be recovered during substitution.
-				panic(err)
+				lastErr = err
+				return match
 			}
+
 			return subValue
-		}), nil
+		})
+		if lastErr != nil {
+			return "", lastErr
+		}
+
+		return result, nil
 	}
 
-	scanner := bufio.NewScanner(strings.NewReader(envText))
+	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 
@@ -105,14 +115,9 @@ func Parse(envText string, subst bool, substEnv Env) (Env, error) {
 
 		if substEnabled {
 			var err error
-			defer func() {
-				if r := recover(); r != nil {
-					panic(fmt.Errorf("error substituting value for key %q: %v", key, r))
-				}
-			}()
 			value, err = replacement(value)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("error substituting value for key %q: %w", key, err)
 			}
 		}
 
@@ -127,12 +132,13 @@ func Parse(envText string, subst bool, substEnv Env) (Env, error) {
 }
 
 func Load(filePath string, subst bool, substEnv Env) (Env, error) {
-	data, err := os.ReadFile(filePath)
+	f, err := os.Open(filePath)
 	if err != nil {
 		return Env{}, nil
 	}
+	defer f.Close()
 
-	return Parse(string(data), subst, substEnv)
+	return Parse(f, subst, substEnv)
 }
 
 func OS() Env {
