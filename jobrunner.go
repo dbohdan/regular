@@ -74,7 +74,8 @@ func (r jobRunner) addJob(job JobConfig) {
 	logJobPrintf(
 		job.Name,
 		"Put job in runner queue of length %v: %v",
-		len(queue.jobs),
+		// Report the queue length before the job was added.
+		len(queue.jobs)-1,
 		queueName,
 	)
 }
