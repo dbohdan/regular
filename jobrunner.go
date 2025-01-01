@@ -157,15 +157,15 @@ func (r jobRunner) runQueueHead(queueName string) error {
 	r.mu.Unlock()
 
 	if notifyErr != nil {
-		return fmt.Errorf("failed to notify about completed job: %w", notifyErr)
+		return newJobError(job.Name, fmt.Errorf("failed to notify about completed job: %w", notifyErr))
 	}
 
 	if saveErr != nil {
-		return fmt.Errorf("failed to save completed job: %w", saveErr)
+		return newJobError(job.Name, fmt.Errorf("failed to save completed job: %w", saveErr))
 	}
 
 	if runErr != nil {
-		return fmt.Errorf("script failed: %w", runErr)
+		return newJobError(job.Name,fmt.Errorf("script failed: %w", runErr))
 	}
 
 	return nil
