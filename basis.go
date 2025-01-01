@@ -8,6 +8,8 @@ import (
 )
 
 const (
+	version = "0.1.0"
+
 	dirName             = "regular"
 	envFileName         = "env"
 	jobFileName         = "job.star"

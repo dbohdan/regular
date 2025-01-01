@@ -22,8 +22,26 @@ type CLI struct {
 	Run    RunCmd    `cmd:"" help:"Run scheduler"`
 	Status StatusCmd `cmd:"" help:"Show job status"`
 
-	ConfigRoot string `help:"Path to config directory" default:"${defaultConfigRoot}" type:"path"`
-	StateRoot  string `help:"Path to state directory" default:"${defaultStateRoot}" type:"path"`
+	Version    VersionFlag `short:"V" help:"Print version number and exit"`
+	ConfigRoot string      `help:"Path to config directory" default:"${defaultConfigRoot}" type:"path"`
+	StateRoot  string      `help:"Path to state directory" default:"${defaultStateRoot}" type:"path"`
+}
+
+type VersionFlag string
+
+func (v VersionFlag) Decode(ctx *kong.DecodeContext) error {
+	return nil
+}
+
+func (v VersionFlag) IsBool() bool {
+	return true
+}
+
+func (v VersionFlag) BeforeApply(app *kong.Kong, vars kong.Vars) error {
+	fmt.Println(version)
+	app.Exit(0)
+
+	return nil
 }
 
 func capitalizeFirst(s string) string {
