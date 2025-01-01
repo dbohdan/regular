@@ -28,7 +28,7 @@ func (s *StatusCmd) Run(config Config) error {
 		if !info.IsDir() && filepath.Base(path) == jobFileName {
 			_, err := jobs.update(config.ConfigRoot, path)
 			if err != nil {
-				return fmt.Errorf("error loading job %s: %w", path, err)
+				return fmt.Errorf("error loading job %q: %w", path, err)
 			}
 		}
 
@@ -38,7 +38,14 @@ func (s *StatusCmd) Run(config Config) error {
 		return err
 	}
 
+	db, err := openJobRunnerDB(config.StateRoot)
+	if err != nil {
+		return err
+	}
+	defer db.close()
+
 	secret := regexp.MustCompile(secretRegexp)
+
 
 	for name, job := range jobs.byName {
 		for key, value := range envfile.OS() {
@@ -60,7 +67,7 @@ func (s *StatusCmd) Run(config Config) error {
 		} else {
 			fmt.Println("    env:")
 			for k, v := range job.Env {
-				fmt.Printf("        %s: %s\n", k, v)
+				fmt.Printf("        %v: %v\n", k, v)
 			}
 		}
 
@@ -68,9 +75,9 @@ func (s *StatusCmd) Run(config Config) error {
 		fmt.Println("    jitter:", map[time.Duration]string{0: "none"}[job.Jitter])
 		fmt.Println("    queue:", job.Queue)
 
-		completed, err := readCompletedJob(config.StateRoot, name)
+		completed, err := db.getLastCompleted(job.Name)
 		if err != nil {
-			return fmt.Errorf("error reading completed job %s: %w", name, err)
+			return fmt.Errorf("error getting last completed job %q: %w", name, err)
 		}
 
 		if completed == nil {
@@ -132,26 +139,6 @@ func (s *StatusCmd) Run(config Config) error {
 	}
 
 	return nil
-}
-
-func readCompletedJob(stateRoot, jobName string) (*CompletedJob, error) {
-	completedPath := filepath.Join(stateRoot, jobName, completedJobFileName)
-
-	data, err := os.ReadFile(completedPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-
-		return nil, err
-	}
-
-	completed, err := UnmarshalCompletedJob(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return &completed, nil
 }
 
 func tailLog(path string, maxLines int) (time.Time, []string, error) {

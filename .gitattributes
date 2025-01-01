@@ -1,1 +1,2 @@
+/go.sum -diff
 /poetry.lock -diff

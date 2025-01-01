@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,7 +18,7 @@ import (
 )
 
 type jobRunner struct {
-	completed map[string][]CompletedJob
+	db        *jobRunnerDB
 	notify    notifyWhenDone
 	queues    map[string]jobQueue
 	stateRoot string
@@ -27,27 +26,28 @@ type jobRunner struct {
 	mu *sync.RWMutex
 }
 
-func newJobRunner(notify notifyWhenDone, stateRoot string) jobRunner {
+func newJobRunner(notify notifyWhenDone, stateRoot string) (jobRunner, error) {
+	db, err := openJobRunnerDB(stateRoot)
+	if err != nil {
+		return jobRunner{}, fmt.Errorf("failed to open completed jobs database: %w", err)
+	}
+
 	return jobRunner{
-		completed: make(map[string][]CompletedJob),
+		db:        db,
 		notify:    notify,
 		queues:    make(map[string]jobQueue),
 		stateRoot: stateRoot,
-
-		mu: &sync.RWMutex{},
-	}
+		mu:        &sync.RWMutex{},
+	}, nil
 }
 
-func (r jobRunner) lastCompleted(jobName string) *CompletedJob {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	jobCompleted, ok := r.completed[jobName]
-	if !ok || len(jobCompleted) == 0 {
-		return nil
+func (r jobRunner) lastCompleted(jobName string) (*CompletedJob, error) {
+	completed, err := r.db.getLastCompleted(jobName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get last completed job for %q: %w", jobName, err)
 	}
 
-	return &jobCompleted[len(jobCompleted)-1]
+	return completed, nil
 }
 
 func (r jobRunner) addJob(job JobConfig) {
@@ -93,8 +93,7 @@ func (r jobRunner) runQueueHead(queueName string) error {
 	r.mu.RUnlock()
 
 	if !ok {
-		log.Printf("Requested to run head of nonexistent queue: %v", queueName)
-		return nil
+		return fmt.Errorf("requested to run head of nonexistent queue: %w", queueName)
 	}
 
 	if queue.activeJob || len(queue.jobs) == 0 {
@@ -146,21 +145,13 @@ func (r jobRunner) runQueueHead(queueName string) error {
 	cj.Finished = time.Now()
 
 	r.mu.Lock()
-	completed, ok := r.completed[job.Name]
-	if ok {
-		completed = append(completed, cj)
-	} else {
-		completed = []CompletedJob{cj}
-	}
-	r.completed[job.Name] = completed
-
 	queue, ok = r.queues[queueName]
 	if ok {
 		queue.activeJob = false
 		r.queues[queueName] = queue
 	}
 
-	saveErr := cj.Save(jobStateDir)
+	saveErr := r.db.saveCompletedJob(job.Name, cj)
 	notifyErr := notifyIfNeeded(r.notify, job.Notify, job.Name, cj)
 	r.mu.Unlock()
 

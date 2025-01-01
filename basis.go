@@ -8,12 +8,12 @@ import (
 )
 
 const (
-	completedJobFileName = "completed.json"
-	dirName              = "regular"
-	envFileName          = "env"
-	jobFileName          = "job.star"
-	stderrFileName       = "stderr.log"
-	stdoutFileName       = "stdout.log"
+	dirName             = "regular"
+	envFileName         = "env"
+	jobFileName         = "job.star"
+	jobRunnerDBFileName = "state.sqlite3"
+	stderrFileName      = "stderr.log"
+	stdoutFileName      = "stdout.log"
 
 	jobDirEnvVar = "REGULAR_JOB_DIR"
 

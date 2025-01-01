@@ -30,7 +30,10 @@ func (j JobConfig) schedule(runner jobRunner) error {
 		return nil
 	}
 
-	lastCompleted := runner.lastCompleted(j.Name)
+	lastCompleted, err := runner.lastCompleted(j.Name)
+	if err != nil {
+		return err
+	}
 
 	exitStatus := -1
 	finished := -1

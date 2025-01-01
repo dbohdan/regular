@@ -44,7 +44,7 @@ func runService(config Config) error {
 		log.Fatalf("Error walking config dir: %v", err)
 	}
 
-	runner := newJobRunner(notifyUserByEmail, config.StateRoot)
+	runner, _ := newJobRunner(notifyUserByEmail, config.StateRoot)
 
 	go withLog(func() error {
 		return jobs.schedule(runner)

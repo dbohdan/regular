@@ -2,9 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -63,23 +60,4 @@ func UnmarshalCompletedJob(data []byte) (CompletedJob, error) {
 	}
 
 	return cj, nil
-}
-
-func (cj CompletedJob) Save(jobStateDir string) error {
-	if err := os.MkdirAll(jobStateDir, dirPerms); err != nil {
-		return fmt.Errorf("failed to create state directory: %v", err)
-	}
-
-	filename := filepath.Join(jobStateDir, completedJobFileName)
-
-	jsonData, err := cj.MarshalJSON()
-	if err != nil {
-		return fmt.Errorf("failed to marshal completed job: %v", err)
-	}
-
-	if err := os.WriteFile(filename, jsonData, filePerms); err != nil {
-		return fmt.Errorf("failed to write completed job data: %v", err)
-	}
-
-	return nil
 }
