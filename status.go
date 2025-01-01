@@ -37,7 +37,7 @@ func (s *StatusCmd) Run(config Config) error {
 		return err
 	}
 
-	db, err := openJobRunnerDB(config.StateRoot)
+	db, err := openAppDB(config.StateRoot)
 	if err != nil {
 		return err
 	}

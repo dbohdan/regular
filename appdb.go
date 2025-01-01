@@ -12,16 +12,16 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-type jobRunnerDB struct {
+type appDB struct {
 	db *sql.DB
 }
 
-func openJobRunnerDB(stateRoot string) (*jobRunnerDB, error) {
+func openAppDB(stateRoot string) (*appDB, error) {
 	if err := os.MkdirAll(stateRoot, dirPerms); err != nil {
 		return nil, fmt.Errorf("failed to create state directory: %v", err)
 	}
 
-	dbPath := filepath.Join(stateRoot, jobRunnerDBFileName)
+	dbPath := filepath.Join(stateRoot, appDBFileName)
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %v", err)
@@ -32,10 +32,10 @@ func openJobRunnerDB(stateRoot string) (*jobRunnerDB, error) {
 		return nil, err
 	}
 
-	return &jobRunnerDB{db: db}, nil
+	return &appDB{db: db}, nil
 }
 
-func (c *jobRunnerDB) close() error {
+func (c *appDB) close() error {
 	return c.db.Close()
 }
 
@@ -70,7 +70,7 @@ func createSchema(db *sql.DB) error {
 	return err
 }
 
-func (c *jobRunnerDB) saveCompletedJob(jobName string, completed CompletedJob, logs []logFile) error {
+func (c *appDB) saveCompletedJob(jobName string, completed CompletedJob, logs []logFile) error {
 	tx, err := c.db.Begin()
 	if err != nil {
 		return err
@@ -111,7 +111,7 @@ func (c *jobRunnerDB) saveCompletedJob(jobName string, completed CompletedJob, l
 	return tx.Commit()
 }
 
-func (c *jobRunnerDB) saveLogFile(tx *sql.Tx, jobID int64, logName, path string) error {
+func (c *appDB) saveLogFile(tx *sql.Tx, jobID int64, logName, path string) error {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -151,7 +151,7 @@ func (c *jobRunnerDB) saveLogFile(tx *sql.Tx, jobID int64, logName, path string)
 	return scanner.Err()
 }
 
-func (c *jobRunnerDB) getLastCompleted(jobName string) (*CompletedJob, error) {
+func (c *appDB) getLastCompleted(jobName string) (*CompletedJob, error) {
 	var completed CompletedJob
 	err := c.db.QueryRow(`
 		SELECT
@@ -179,7 +179,7 @@ func (c *jobRunnerDB) getLastCompleted(jobName string) (*CompletedJob, error) {
 	return &completed, nil
 }
 
-func (c *jobRunnerDB) getJobLogs(jobName string, logName string, limit int) ([]string, error) {
+func (c *appDB) getJobLogs(jobName string, logName string, limit int) ([]string, error) {
 	rows, err := c.db.Query(`
 		SELECT l.line
 		FROM job_logs l

@@ -18,7 +18,7 @@ import (
 )
 
 type jobRunner struct {
-	db        *jobRunnerDB
+	db        *appDB
 	notify    notifyWhenDone
 	queues    map[string]jobQueue
 	stateRoot string
@@ -26,12 +26,7 @@ type jobRunner struct {
 	mu *sync.RWMutex
 }
 
-func newJobRunner(notify notifyWhenDone, stateRoot string) (jobRunner, error) {
-	db, err := openJobRunnerDB(stateRoot)
-	if err != nil {
-		return jobRunner{}, fmt.Errorf("failed to open completed jobs database: %w", err)
-	}
-
+func newJobRunner(db *appDB, notify notifyWhenDone, stateRoot string) (jobRunner, error) {
 	return jobRunner{
 		db:        db,
 		notify:    notify,
@@ -165,7 +160,7 @@ func (r jobRunner) runQueueHead(queueName string) error {
 	}
 
 	if runErr != nil {
-		return newJobError(job.Name,fmt.Errorf("script failed: %w", runErr))
+		return newJobError(job.Name, fmt.Errorf("script failed: %w", runErr))
 	}
 
 	return nil

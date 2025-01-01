@@ -59,7 +59,7 @@ func localUserAddress(username string) string {
 }
 
 func notifyUserByEmail(jobName string, completed CompletedJob) error {
-	db, err := openJobRunnerDB(defaultStateRoot)
+	db, err := openAppDB(defaultStateRoot)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %v", err)
 	}
@@ -98,7 +98,7 @@ func notifyUserByEmail(jobName string, completed CompletedJob) error {
 	return nil
 }
 
-func formatMessage(db *jobRunnerDB, jobName string, completed CompletedJob) (string, string, error) {
+func formatMessage(db *appDB, jobName string, completed CompletedJob) (string, string, error) {
 	subjectTemplate := successSubject
 	if !completed.IsSuccess() {
 		subjectTemplate = failureSubject
