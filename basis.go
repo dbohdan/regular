@@ -27,6 +27,8 @@ const (
 	oneMinuteVar  = "one_minute"
 	shouldRunVar  = "should_run"
 
+	allJobs = "*"
+
 	redactedValue = "[redacted]"
 	secretRegexp  = "(?i)(key|password|secret|token)"
 

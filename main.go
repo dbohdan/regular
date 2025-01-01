@@ -15,7 +15,9 @@ import (
 type RunCmd struct{}
 
 type StatusCmd struct {
-	LogLines int `help:"Number of log lines to show" short:"l" default:"${defaultLogLines}"`
+	AppLog   bool   `short:"a" help:"Show application log"`
+	LogLines int    `help:"Number of log lines to show" short:"l" default:"${defaultLogLines}"`
+	JobName  string `arg:"" optional:"" default:"${allJobs}" help:"Show status for specific job only ('${allJobs}' for all)"`
 }
 
 type CLI struct {
@@ -116,6 +118,7 @@ func main() {
 			os.Exit(code)
 		}),
 		kong.Vars{
+			"allJobs":           allJobs,
 			"defaultConfigRoot": defaultConfigRoot,
 			"defaultLogLines":   strconv.Itoa(defaultLogLines),
 			"defaultStateRoot":  defaultStateRoot,
