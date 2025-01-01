@@ -127,7 +127,6 @@ func loadJob(env envfile.Env, path string) (JobConfig, error) {
 	}
 
 	predeclared := starlark.StringDict{
-		enabledVar:   starlark.True,
 		envVar:       envDict,
 		oneDayVar:    starlark.MakeInt(24 * 60 * 60),
 		oneHourVar:   starlark.MakeInt(60 * 60),
@@ -152,8 +151,11 @@ func loadJob(env envfile.Env, path string) (JobConfig, error) {
 		return job, fmt.Errorf(`failed to convert job to struct: %w`, err)
 	}
 
+	enabledValue, exists := globals[enabledVar]
+	job.Enabled = !exists || enabledValue == starlark.True
+
 	finalEnvDict := envDict
-	_, exists := globals[envVar]
+	_, exists = globals[envVar]
 	if exists {
 		var ok bool
 		finalEnvDict, ok = globals[envVar].(*starlark.Dict)
@@ -177,6 +179,8 @@ func loadJob(env envfile.Env, path string) (JobConfig, error) {
 		job.Env[key.GoString()] = value.GoString()
 	}
 
+	job.Jitter *= time.Second
+
 	notifyModeString := ""
 	notifyModeValue, exists := globals[notifyModeVar]
 	if exists {
@@ -187,11 +191,7 @@ func loadJob(env envfile.Env, path string) (JobConfig, error) {
 
 		notifyModeString = value.GoString()
 	}
-
 	job.Notify, _ = parseNotifyMode(notifyModeString)
-
-	job.Enabled = predeclared[enabledVar] == starlark.True
-	job.Jitter *= time.Second
 
 	return job, nil
 }
