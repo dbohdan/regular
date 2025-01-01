@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"database/sql"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -38,6 +41,8 @@ func (c *jobRunnerDB) close() error {
 
 func createSchema(db *sql.DB) error {
 	_, err := db.Exec(`
+	    PRAGMA foreign_keys=ON;
+
 		CREATE TABLE IF NOT EXISTS completed_jobs (
 			id INTEGER PRIMARY KEY,
 			job_name TEXT NOT NULL,
@@ -45,38 +50,111 @@ func createSchema(db *sql.DB) error {
 			exit_status INTEGER NOT NULL,
 			started DATETIME NOT NULL,
 			finished DATETIME NOT NULL,
-			stdout_file TEXT NOT NULL,
-			stderr_file TEXT NOT NULL,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);
 
 		CREATE INDEX IF NOT EXISTS idx_completed_jobs_job_name ON completed_jobs(job_name);
+
+		CREATE TABLE IF NOT EXISTS job_logs (
+			id INTEGER PRIMARY KEY,
+			completed_job_id INTEGER NOT NULL,
+			log_name TEXT NOT NULL,
+			line_number INTEGER NOT NULL,
+			line TEXT NOT NULL,
+			FOREIGN KEY(completed_job_id) REFERENCES completed_jobs(id)
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_job_logs_completed_job_id ON job_logs(completed_job_id);
 	`)
 
 	return err
 }
 
 func (c *jobRunnerDB) saveCompletedJob(jobName string, completed CompletedJob) error {
-	_, err := c.db.Exec(`
+	tx, err := c.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	result, err := tx.Exec(`
 		INSERT INTO completed_jobs (
 			job_name,
 			error,
 			exit_status,
 			started,
-			finished,
-			stdout_file,
-			stderr_file
-		) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			finished
+		) VALUES (?, ?, ?, ?, ?)`,
 		jobName,
 		completed.Error,
 		completed.ExitStatus,
 		completed.Started,
 		completed.Finished,
-		completed.StdoutFile,
-		completed.StderrFile,
 	)
+	if err != nil {
+		return err
+	}
 
-	return err
+	jobID, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+
+	for _, logFile := range []struct {
+		name string
+		path string
+	}{
+		{"stdout", completed.StdoutFile},
+		{"stderr", completed.StderrFile},
+	} {
+		if err := c.saveLogFile(tx, jobID, logFile.name, logFile.path); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (c *jobRunnerDB) saveLogFile(tx *sql.Tx, jobID int64, logName, path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	defer f.Close()
+
+	buf := make([]byte, maxLogBufferSize)
+	n, err := f.Read(buf)
+	if err != nil && err != io.EOF {
+		return err
+	}
+	buf = buf[:n]
+
+	lineNum := 1
+	scanner := bufio.NewScanner(bytes.NewReader(buf))
+	for scanner.Scan() {
+		_, err = tx.Exec(`
+			INSERT INTO job_logs (
+				completed_job_id,
+				log_name,
+				line_number,
+				line
+			) VALUES (?, ?, ?, ?)`,
+			jobID,
+			logName,
+			lineNum,
+			scanner.Text(),
+		)
+		if err != nil {
+			return err
+		}
+		lineNum++
+	}
+	return scanner.Err()
 }
 
 func (c *jobRunnerDB) getLastCompleted(jobName string) (*CompletedJob, error) {
@@ -86,9 +164,7 @@ func (c *jobRunnerDB) getLastCompleted(jobName string) (*CompletedJob, error) {
 			error,
 			exit_status,
 			started,
-			finished,
-			stdout_file,
-			stderr_file
+			finished
 		FROM completed_jobs
 		WHERE job_name = ?
 		ORDER BY id DESC LIMIT 1`,
@@ -98,8 +174,6 @@ func (c *jobRunnerDB) getLastCompleted(jobName string) (*CompletedJob, error) {
 		&completed.ExitStatus,
 		&completed.Started,
 		&completed.Finished,
-		&completed.StdoutFile,
-		&completed.StderrFile,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -111,42 +185,39 @@ func (c *jobRunnerDB) getLastCompleted(jobName string) (*CompletedJob, error) {
 	return &completed, nil
 }
 
-func (c *jobRunnerDB) getAllCompleted(jobName string) ([]CompletedJob, error) {
+func (c *jobRunnerDB) getJobLogs(jobName string, logName string, limit int) ([]string, error) {
 	rows, err := c.db.Query(`
-		SELECT
-			error,
-			exit_status,
-			started,
-			finished,
-			stdout_file,
-			stderr_file
-		FROM completed_jobs
-		WHERE job_name = ?
-		ORDER BY id ASC`,
+		SELECT l.line
+		FROM job_logs l
+		JOIN completed_jobs j ON j.id = l.completed_job_id
+		WHERE l.log_name = ?
+		AND j.id = (
+			SELECT id
+			FROM completed_jobs
+			WHERE job_name = ?
+			ORDER BY id DESC
+			LIMIT 1
+		)
+		ORDER BY l.line_number ASC
+		LIMIT ?`,
+		logName,
 		jobName,
+		limit,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var completed []CompletedJob
+	var lines []string
 	for rows.Next() {
-		var job CompletedJob
-		err := rows.Scan(
-			&job.Error,
-			&job.ExitStatus,
-			&job.Started,
-			&job.Finished,
-			&job.StdoutFile,
-			&job.StderrFile,
-		)
-		if err != nil {
+		var line string
+		if err := rows.Scan(&line); err != nil {
 			return nil, err
 		}
 
-		completed = append(completed, job)
+		lines = append(lines, line)
 	}
 
-	return completed, rows.Err()
+	return lines, rows.Err()
 }

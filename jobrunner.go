@@ -54,10 +54,7 @@ func (r jobRunner) addJob(job JobConfig) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	queueName := job.Queue
-	if queueName == "" {
-		queueName = job.Name
-	}
+	queueName := job.QueueName()
 
 	queue, ok := r.queues[queueName]
 	if !ok {
@@ -93,7 +90,7 @@ func (r jobRunner) runQueueHead(queueName string) error {
 	r.mu.RUnlock()
 
 	if !ok {
-		return fmt.Errorf("requested to run head of nonexistent queue: %w", queueName)
+		return fmt.Errorf("requested to run head of nonexistent queue: %v", queueName)
 	}
 
 	if queue.activeJob || len(queue.jobs) == 0 {
@@ -122,12 +119,12 @@ func (r jobRunner) runQueueHead(queueName string) error {
 	if job.Log {
 		stdoutFile, _ = os.OpenFile(
 			cj.StdoutFile,
-			os.O_RDWR|os.O_CREATE,
+			os.O_CREATE|os.O_TRUNC|os.O_WRONLY,
 			filePerms,
 		)
 		stderrFile, _ = os.OpenFile(
 			cj.StderrFile,
-			os.O_RDWR|os.O_CREATE,
+			os.O_CREATE|os.O_TRUNC|os.O_WRONLY,
 			filePerms,
 		)
 	}

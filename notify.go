@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os/user"
-	"path/filepath"
 	"strings"
 
 	mail "github.com/xhit/go-simple-mail/v2"
@@ -60,7 +59,13 @@ func localUserAddress(username string) string {
 }
 
 func notifyUserByEmail(jobName string, completed CompletedJob) error {
-	subject, text, err := formatMessage(jobName, completed)
+	db, err := openJobRunnerDB(defaultStateRoot)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %v", err)
+	}
+	defer db.close()
+
+	subject, text, err := formatMessage(db, jobName, completed)
 	if err != nil {
 		return fmt.Errorf("failed to format notification message: %v", err)
 	}
@@ -93,7 +98,7 @@ func notifyUserByEmail(jobName string, completed CompletedJob) error {
 	return nil
 }
 
-func formatMessage(jobName string, completed CompletedJob) (string, string, error) {
+func formatMessage(db *jobRunnerDB, jobName string, completed CompletedJob) (string, string, error) {
 	subjectTemplate := successSubject
 	if !completed.IsSuccess() {
 		subjectTemplate = failureSubject
@@ -107,8 +112,8 @@ func formatMessage(jobName string, completed CompletedJob) (string, string, erro
 		sb.WriteString(fmt.Sprintf(exitStatusText, completed.ExitStatus))
 	}
 
-	for _, path := range []string{completed.StdoutFile, completed.StderrFile} {
-		_, lines, err := tailLog(path, defaultLogLines)
+	for _, logName := range []string{"stdout", "stderr"} {
+		lines, err := db.getJobLogs(jobName, logName, defaultLogLines)
 		if err != nil {
 			return "", "", fmt.Errorf("error reading log: %w", err)
 		}
@@ -117,7 +122,7 @@ func formatMessage(jobName string, completed CompletedJob) (string, string, erro
 			continue
 		}
 
-		sb.WriteString(filepath.Base(path) + ":\n")
+		sb.WriteString(logName + ":\n")
 
 		for _, line := range lines {
 			sb.WriteString("> " + line + "\n")

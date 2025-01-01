@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nxadm/tail"
 	"golang.org/x/term"
 
 	"dbohdan.com/regular/envfile"
@@ -46,7 +45,6 @@ func (s *StatusCmd) Run(config Config) error {
 
 	secret := regexp.MustCompile(secretRegexp)
 
-
 	for name, job := range jobs.byName {
 		for key, value := range envfile.OS() {
 			if osValue, ok := job.Env[key]; ok && value == osValue {
@@ -73,7 +71,7 @@ func (s *StatusCmd) Run(config Config) error {
 
 		fmt.Println("    enabled:", map[bool]string{true: "yes", false: "no"}[job.Enabled])
 		fmt.Println("    jitter:", map[time.Duration]string{0: "none"}[job.Jitter])
-		fmt.Println("    queue:", job.Queue)
+		fmt.Println("    queue:", job.QueueName())
 
 		completed, err := db.getLastCompleted(job.Name)
 		if err != nil {
@@ -92,88 +90,40 @@ func (s *StatusCmd) Run(config Config) error {
 
 		fmt.Println("    logs:")
 
-		stdoutPath := filepath.Join(config.StateRoot, name, stdoutFileName)
-		stderrPath := filepath.Join(config.StateRoot, name, stderrFileName)
-
-		stdoutTime, stdoutLines, err := tailLog(stdoutPath, s.LogLines)
+		stdoutLines, err := db.getJobLogs(name, "stdout", s.LogLines)
 		if err != nil {
-			return fmt.Errorf("error reading stdout for %q: %w", name, err)
+			return fmt.Errorf("error loading stdout for job %q: %w", name, err)
+		}
+		if len(stdoutLines) == 0 {
+			fmt.Println("        stdout: empty")
+		} else {
+			fmt.Println("        stdout:")
+			fmt.Println(separator)
+			for _, line := range stdoutLines {
+				fmt.Println(line)
+			}
+			fmt.Println(separator)
 		}
 
-		stderrTime, stderrLines, err := tailLog(stderrPath, s.LogLines)
+		stderrLines, err := db.getJobLogs(name, "stderr", s.LogLines)
 		if err != nil {
-			return fmt.Errorf("error reading stderr for %q: %w", name, err)
+			return fmt.Errorf("error loading stderr for job %q: %w", name, err)
 		}
-
-		fmt.Println("        stdout:")
-		if !stdoutTime.IsZero() {
-			fmt.Println("            modified:", stdoutTime.Format(timestampFormat))
-			if len(stdoutLines) == 0 {
-				fmt.Println("            lines: none")
-			} else {
-				fmt.Println("            lines:")
-				fmt.Println(separator)
-				for _, line := range stdoutLines {
-					fmt.Println(line)
-				}
-				fmt.Println(separator)
+		if len(stderrLines) == 0 {
+			fmt.Println("        stderr: empty")
+		} else {
+			fmt.Println("        stderr:")
+			fmt.Println(separator)
+			for _, line := range stderrLines {
+				fmt.Println(line)
 			}
-		}
-
-		fmt.Println("        stderr:")
-		if !stderrTime.IsZero() {
-			fmt.Println("            modified:", stderrTime.Format(timestampFormat))
-			if len(stderrLines) == 0 {
-				fmt.Println("            lines: none")
-			} else {
-				fmt.Println("            lines:")
-				fmt.Println(separator)
-				for _, line := range stderrLines {
-					fmt.Println(line)
-				}
-				fmt.Println(separator)
-			}
+			fmt.Println(separator)
 		}
 
 		fmt.Println()
 	}
 
 	return nil
-}
-
-func tailLog(path string, maxLines int) (time.Time, []string, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return time.Time{}, nil, nil
-		}
-
-		return time.Time{}, nil, err
-	}
-
-	t, err := tail.TailFile(
-		path,
-		tail.Config{
-			Follow:   false,
-			Location: nil,
-		},
-	)
-	if err != nil {
-		return time.Time{}, nil, err
-	}
-	defer t.Stop()
-
-	// Collect the lines in a ring buffer.
-	lines := []string{}
-	for line := range t.Lines {
-		lines = append(lines, line.Text)
-
-		if len(lines) > maxLines {
-			lines = lines[1:]
-		}
-	}
-
-	return info.ModTime(), lines, nil
 }
 
 func getTermWidth() int {

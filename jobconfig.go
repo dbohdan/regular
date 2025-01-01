@@ -25,6 +25,14 @@ type JobConfig struct {
 	ShouldRun  starlark.Value `starlark:"should_run"`
 }
 
+func (j JobConfig) QueueName() string {
+	if j.Queue == "" {
+		return j.Name
+	}
+
+	return j.Queue
+}
+
 func (j JobConfig) schedule(runner jobRunner) error {
 	if !j.Enabled {
 		return nil
