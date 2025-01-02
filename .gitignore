@@ -5,6 +5,7 @@ __pycache__/
 /.*_cache/
 /.nox/
 /.python-version
+/.task/
 /.tox/
 /attic/
 /build/

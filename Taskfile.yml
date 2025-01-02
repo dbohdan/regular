@@ -1,0 +1,50 @@
+version: '3'
+
+vars:
+  ext: '{{if eq OS "windows"}}.exe{{end}}'
+
+env:
+  CGO_ENABLED: 0
+
+tasks:
+  default:
+    deps:
+      - test
+
+  all:
+    desc: 'Build and test everything'
+    deps:
+      - test
+
+  build:
+    desc: 'Build all components'
+    deps:
+      - build_regular
+
+  build_regular:
+    desc: 'Build the Regular binary'
+    cmds:
+      - cmd: go build -trimpath
+    sources:
+      - '*.go'
+    generates:
+      - regular
+
+  clean:
+    desc: 'Clean up binaries'
+    cmds:
+      - rm -f regular regular.exe
+
+  release:
+    desc: 'Prepare a release'
+    deps:
+      - build_regular
+    cmds:
+      - VERSION=$(./regular{{.ext}} version) go run script/release.go
+
+  test:
+    desc: 'Run tests'
+    deps:
+      - build_regular
+    cmds:
+      - go test ./...
