@@ -14,6 +14,8 @@ import (
 	"github.com/alecthomas/kong"
 )
 
+type ListCmd struct{}
+
 type LogCmd struct {
 	LogLines int `help:"Number of log lines to show" short:"l" default:"${defaultLogLines}"`
 }
@@ -31,6 +33,7 @@ type StatusCmd struct {
 }
 
 type CLI struct {
+	List   ListCmd   `cmd:"" help:"List available jobs"`
 	Log    LogCmd    `cmd:"" help:"Show application log"`
 	Run    RunCmd    `cmd:"" help:"Run jobs once"`
 	Start  StartCmd  `cmd:"" help:"Start scheduler"`
