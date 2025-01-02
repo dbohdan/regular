@@ -15,12 +15,12 @@ func Quote(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kw
 	var shell string = "posix"
 
 	if err := starlark.UnpackPositionalArgs(b.Name(), args, kwargs, 1, &s, &shell); err != nil {
-		return nil, err
+		return starlark.String(""), err
 	}
 
 	quoted, err := shellquote.Quote(s, shell)
 	if err != nil {
-		return nil, err
+		return starlark.String(""), err
 	}
 
 	return starlark.String(quoted), nil
