@@ -112,20 +112,22 @@ func formatMessage(db *appDB, jobName string, completed CompletedJob) (string, s
 		sb.WriteString(fmt.Sprintf(exitStatusText, completed.ExitStatus))
 	}
 
-	for _, logName := range []string{"stdout", "stderr"} {
-		lines, err := db.getJobLogs(jobName, logName, defaultLogLines)
-		if err != nil {
-			return "", "", fmt.Errorf("error reading log: %w", err)
-		}
+	if db != nil {
+		for _, logName := range []string{"stdout", "stderr"} {
+			lines, err := db.getJobLogs(jobName, logName, defaultLogLines)
+			if err != nil {
+				return "", "", fmt.Errorf("error reading log: %w", err)
+			}
 
-		if len(lines) == 0 {
-			continue
-		}
+			if len(lines) == 0 {
+				continue
+			}
 
-		sb.WriteString(logName + ":\n")
+			sb.WriteString(logName + ":\n")
 
-		for _, line := range lines {
-			sb.WriteString("> " + line + "\n")
+			for _, line := range lines {
+				sb.WriteString("> " + line + "\n")
+			}
 		}
 	}
 
