@@ -45,10 +45,19 @@ func (s *StatusCmd) Run(config Config) error {
 
 	secret := regexp.MustCompile(secretRegexp)
 
-	for name, job := range jobs.byName {
-		if s.JobName != allJobs && name != s.JobName {
+	seenNames := make(map[string]struct{})
+
+	for _, name := range s.JobNames {
+		job, ok := jobs.byName[name]
+		if !ok {
 			continue
 		}
+
+		_, seen := seenNames[name]
+		if seen {
+			continue
+		}
+		seenNames[name] = struct{}{}
 
 		for key, value := range envfile.OS() {
 			if osValue, ok := job.Env[key]; ok && value == osValue {

@@ -19,7 +19,7 @@ func (r *RunCmd) Run(config Config) error {
 
 	jobs := newJobScheduler()
 
-	for _, jobName := range r.Jobs {
+	for _, jobName := range r.JobNames {
 		path := filepath.Join(config.ConfigRoot, jobName, jobFileName)
 
 		_, job, err := jobs.update(config.ConfigRoot, path)

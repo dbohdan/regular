@@ -19,15 +19,15 @@ type LogCmd struct {
 }
 
 type RunCmd struct {
-	Force bool     `short:"f" help:"Run jobs regardless of schedule"`
-	Jobs  []string `arg:"" optional:"" help:"Job names to run"`
+	Force    bool     `short:"f" help:"Run jobs regardless of schedule"`
+	JobNames []string `arg:"" optional:"" help:"Job names to run"`
 }
 
 type StartCmd struct{}
 
 type StatusCmd struct {
-	LogLines int    `help:"Number of log lines to show" short:"l" default:"${defaultLogLines}"`
-	JobName  string `arg:"" optional:"" default:"${allJobs}" help:"Show status for specific job only (\"${allJobs}\" for all)"`
+	LogLines int      `help:"Number of log lines to show" short:"l" default:"${defaultLogLines}"`
+	JobNames []string `arg:"" optional:"" help:"Jobs to show status for (shows all jobs if none specified)"`
 }
 
 type CLI struct {
@@ -140,7 +140,6 @@ func main() {
 			os.Exit(code)
 		}),
 		kong.Vars{
-			"allJobs":           allJobs,
 			"defaultConfigRoot": defaultConfigRoot,
 			"defaultLogLines":   strconv.Itoa(defaultLogLines),
 			"defaultStateRoot":  defaultStateRoot,
