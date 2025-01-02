@@ -61,7 +61,7 @@ func (r jobRunner) addJob(job JobConfig) {
 	queue.mu.Lock()
 	defer queue.mu.Unlock()
 
-	if !job.Duplicates {
+	if !job.Duplicate {
 		for _, otherJob := range queue.jobs {
 			if otherJob.Name == job.Name {
 				return

@@ -13,16 +13,16 @@ import (
 )
 
 type JobConfig struct {
-	Duplicates bool           `starlark:"duplicates"`
-	Enabled    bool           `starlark:"enabled"`
-	Env        envfile.Env    `starlark:"-"`
-	Jitter     time.Duration  `starlark:"jitter"`
-	Log        bool           `starlark:"log"`
-	Name       string         `starlark:"-"`
-	Notify     notifyMode     `starlark:"-"`
-	Queue      string         `starlark:"queue"`
-	Script     string         `starlark:"script"`
-	ShouldRun  starlark.Value `starlark:"should_run"`
+	Duplicate bool           `starlark:"duplicate"`
+	Enabled   bool           `starlark:"enabled"`
+	Env       envfile.Env    `starlark:"-"`
+	Jitter    time.Duration  `starlark:"jitter"`
+	Log       bool           `starlark:"log"`
+	Name      string         `starlark:"-"`
+	Notify    notifyMode     `starlark:"-"`
+	Queue     string         `starlark:"queue"`
+	Script    string         `starlark:"script"`
+	ShouldRun starlark.Value `starlark:"should_run"`
 }
 
 func (j JobConfig) QueueName() string {

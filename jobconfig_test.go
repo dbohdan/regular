@@ -53,8 +53,8 @@ func TestLoadJob(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	jobContent := `
-duplicates = False
-enabled = True
+duplicate = False
+enabled = False
 env["TEST_VAR"] = "test_value"
 jitter = 5
 log = True
@@ -87,9 +87,9 @@ def should_run(**_):
 		got      interface{}
 		expected interface{}
 	}{
-		{"Enabled", job.Enabled, true},
+		{"Enabled", job.Enabled, false},
 		{"Script", job.Script, "\nsleep 1\n"},
-		{"Duplicates", job.Duplicates, false},
+		{"Duplicate", job.Duplicate, false},
 		{"Log", job.Log, true},
 		{"Queue", job.Queue, "test-queue"},
 		{"Jitter", job.Jitter, 5 * time.Second},

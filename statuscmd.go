@@ -72,6 +72,7 @@ func (s *StatusCmd) Run(config Config) error {
 
 		fmt.Println(name)
 		fmt.Println("    dir:", filepath.Join(config.ConfigRoot, name))
+		fmt.Println("    duplicate:", boolYesNo(job.Duplicate))
 
 		if len(job.Env) == 0 {
 			fmt.Println("    env: none")
@@ -82,7 +83,7 @@ func (s *StatusCmd) Run(config Config) error {
 			}
 		}
 
-		fmt.Println("    enabled:", map[bool]string{true: "yes", false: "no"}[job.Enabled])
+		fmt.Println("    enabled:", boolYesNo(job.Enabled))
 		fmt.Println("    jitter:", formatDuration(job.Jitter))
 		fmt.Println("    queue:", job.QueueName())
 

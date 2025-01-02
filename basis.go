@@ -64,6 +64,14 @@ func jobNameFromPath(path string) string {
 	return filepath.Base(filepath.Dir(path))
 }
 
+func boolYesNo(b bool) string {
+	if b {
+		return "yes"
+	}
+
+	return "no"
+}
+
 // Format a `Duration` without the trailing zero units.
 func formatDuration(d time.Duration) string {
 	d = d.Round(time.Millisecond)
