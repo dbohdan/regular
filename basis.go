@@ -11,6 +11,7 @@ const (
 	version = "0.1.0"
 
 	appDBFileName  = "state.sqlite3"
+	appLogFileName = "app.log"
 	dirName        = "regular"
 	envFileName    = "env"
 	jobFileName    = "job.star"

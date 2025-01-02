@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 	"unicode"
@@ -15,14 +17,18 @@ import (
 type RunCmd struct{}
 
 type StatusCmd struct {
-	AppLog   bool   `short:"a" help:"Show application log"`
 	LogLines int    `help:"Number of log lines to show" short:"l" default:"${defaultLogLines}"`
 	JobName  string `arg:"" optional:"" default:"${allJobs}" help:"Show status for specific job only ('${allJobs}' for all)"`
+}
+
+type LogCmd struct {
+	LogLines int `help:"Number of log lines to show" short:"l" default:"${defaultLogLines}"`
 }
 
 type CLI struct {
 	Run    RunCmd    `cmd:"" help:"Run scheduler"`
 	Status StatusCmd `cmd:"" help:"Show job status"`
+	Log    LogCmd    `cmd:"" help:"Show application log"`
 
 	Version    VersionFlag `short:"V" help:"Print version number and exit"`
 	ConfigRoot string      `help:"Path to config directory" default:"${defaultConfigRoot}" type:"path"`
@@ -70,16 +76,16 @@ func withLog(f func() error) {
 }
 
 type logWriter struct {
-	db *appDB
+	tee io.StringWriter
 }
 
 func (writer *logWriter) Write(bytes []byte) (int, error) {
 	timestamp := time.Now()
 	formattedMsg := fmt.Sprintf("[%s] %s", timestamp.Format(timestampFormat), string(bytes))
 
-	if writer.db != nil {
-		if err := writer.db.saveAppLog(timestamp, formattedMsg); err != nil {
-			return 0, fmt.Errorf("failed to save app log: %v\n", err)
+	if writer.tee != nil {
+		if _, err := writer.tee.WriteString(formattedMsg); err != nil {
+			return 0, fmt.Errorf("failed to write to app log: %v\n", err)
 		}
 	}
 
@@ -101,7 +107,15 @@ func main() {
 	}
 	defer db.close()
 
-	log.SetOutput(&logWriter{db: db})
+	logPath := filepath.Join(defaultStateRoot, appLogFileName)
+	logFile, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, filePerms)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to open app log file: %v\n", err)
+		os.Exit(1)
+	}
+	defer logFile.Close()
+
+	log.SetOutput(&logWriter{tee: logFile})
 
 	cli := CLI{}
 	ctx := kong.Parse(&cli,

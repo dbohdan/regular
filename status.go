@@ -45,25 +45,6 @@ func (s *StatusCmd) Run(config Config) error {
 
 	secret := regexp.MustCompile(secretRegexp)
 
-	if s.AppLog {
-		appLog, err := db.getAppLog(s.LogLines)
-		if err != nil {
-			return fmt.Errorf("error loading app log: %w", err)
-		}
-
-		if len(appLog) > 0 {
-			fmt.Println("Application log:")
-			fmt.Println(separator)
-
-			for _, line := range appLog {
-				fmt.Println(line)
-			}
-
-			fmt.Println(separator)
-			fmt.Println()
-		}
-	}
-
 	for name, job := range jobs.byName {
 		if s.JobName != allJobs && name != s.JobName {
 			continue
