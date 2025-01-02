@@ -35,11 +35,11 @@ func newJobScheduler() jobScheduler {
 	}
 }
 
-func (jst jobScheduler) scheduleOnce(runner jobRunner) error {
-	jst.mu.RLock()
-	defer jst.mu.RUnlock()
+func (jsc jobScheduler) scheduleOnce(runner jobRunner) error {
+	jsc.mu.RLock()
+	defer jsc.mu.RUnlock()
 
-	for name, job := range jst.byName {
+	for name, job := range jsc.byName {
 		err := job.schedule(runner)
 		if err != nil {
 			return newJobError(name, fmt.Errorf("scheduling error: %w", err))
@@ -49,17 +49,17 @@ func (jst jobScheduler) scheduleOnce(runner jobRunner) error {
 	return nil
 }
 
-func (jst jobScheduler) schedule(runner jobRunner) error {
+func (jsc jobScheduler) schedule(runner jobRunner) error {
 	ticker := time.NewTicker(scheduleInterval)
 	defer ticker.Stop()
 
-	err := jst.scheduleOnce(runner)
+	err := jsc.scheduleOnce(runner)
 	if err != nil {
 		return err
 	}
 
 	for range ticker.C {
-		err := jst.scheduleOnce(runner)
+		err := jsc.scheduleOnce(runner)
 		if err != nil {
 			return err
 		}
@@ -68,7 +68,7 @@ func (jst jobScheduler) schedule(runner jobRunner) error {
 	return nil
 }
 
-func (jst jobScheduler) update(configRoot, jobPath string) (updateJobsResult, error) {
+func (jsc jobScheduler) update(configRoot, jobPath string) (updateJobsResult, error) {
 	jobDir := jobDir(jobPath)
 	jobName := jobNameFromPath(jobPath)
 
@@ -98,10 +98,10 @@ func (jst jobScheduler) update(configRoot, jobPath string) (updateJobsResult, er
 		return jobsNoChanges, fmt.Errorf("failed to load job: %v", err)
 	}
 
-	jst.mu.Lock()
-	_, exists := jst.byName[jobName]
-	jst.byName[jobName] = job
-	jst.mu.Unlock()
+	jsc.mu.Lock()
+	_, exists := jsc.byName[jobName]
+	jsc.byName[jobName] = job
+	jsc.mu.Unlock()
 
 	if exists {
 		return jobsUpdated, nil
@@ -110,20 +110,20 @@ func (jst jobScheduler) update(configRoot, jobPath string) (updateJobsResult, er
 	return jobsAddedNew, nil
 }
 
-func (jst jobScheduler) remove(name string) error {
-	jst.mu.Lock()
-	defer jst.mu.Unlock()
+func (jsc jobScheduler) remove(name string) error {
+	jsc.mu.Lock()
+	defer jsc.mu.Unlock()
 
-	_, exists := jst.byName[name]
+	_, exists := jsc.byName[name]
 	if !exists {
 		return fmt.Errorf("failed to find job to remove: %v", name)
 	}
 
-	delete(jst.byName, name)
+	delete(jsc.byName, name)
 	return nil
 }
 
-func (jst jobScheduler) watchChanges(configRoot string, watcher *fsnotify.Watcher) error {
+func (jsc jobScheduler) watchChanges(configRoot string, watcher *fsnotify.Watcher) error {
 	debounced := debounce.New(debounceInterval)
 
 	for {
@@ -139,9 +139,9 @@ func (jst jobScheduler) watchChanges(configRoot string, watcher *fsnotify.Watche
 			handleUpdate := func(updatePath string) {
 				jobName := jobNameFromPath(updatePath)
 
-				res, err := jst.update(configRoot, updatePath)
+				res, err := jsc.update(configRoot, updatePath)
 				if err != nil {
-					removeErr := jst.remove(jobName)
+					removeErr := jsc.remove(jobName)
 
 					if removeErr == nil {
 						logJobPrintf(jobName, "Job removed after update error: %v", err)
@@ -170,7 +170,7 @@ func (jst jobScheduler) watchChanges(configRoot string, watcher *fsnotify.Watche
 						handleUpdate(eventPath)
 					})
 				} else if event.Has(fsnotify.Remove) {
-					err := jst.remove(jobName)
+					err := jsc.remove(jobName)
 					if err == nil {
 						logJobPrintf(jobName, "Removed job")
 					} else {
