@@ -9,7 +9,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-func (r *RunCmd) Run(config Config) error {
+func (r *StartCmd) Run(config Config) error {
 	return runService(config)
 }
 
