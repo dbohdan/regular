@@ -181,19 +181,23 @@ func (c *appDB) getLastCompleted(jobName string) (*CompletedJob, error) {
 
 func (c *appDB) getJobLogs(jobName string, logName string, limit int) ([]string, error) {
 	rows, err := c.db.Query(`
-		SELECT l.line
-		FROM job_logs l
-		JOIN completed_jobs j ON j.id = l.completed_job_id
-		WHERE l.log_name = ?
-		AND j.id = (
-			SELECT id
-			FROM completed_jobs
-			WHERE job_name = ?
-			ORDER BY id DESC
-			LIMIT 1
+		SELECT line
+		FROM (
+			SELECT l.line, l.line_number
+			FROM job_logs l
+			JOIN completed_jobs j ON j.id = l.completed_job_id
+			WHERE l.log_name = ?
+			AND j.id = (
+				SELECT id
+				FROM completed_jobs
+				WHERE job_name = ?
+				ORDER BY id DESC
+				LIMIT 1
+			)
+			ORDER BY l.line_number DESC
+			LIMIT ?
 		)
-		ORDER BY l.line_number ASC
-		LIMIT ?`,
+		ORDER BY line_number ASC`,
 		logName,
 		jobName,
 		limit,
