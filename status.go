@@ -25,7 +25,7 @@ func (s *StatusCmd) Run(config Config) error {
 		}
 
 		if !info.IsDir() && filepath.Base(path) == jobFileName {
-			_, err := jobs.update(config.ConfigRoot, path)
+			_, _, err := jobs.update(config.ConfigRoot, path)
 			if err != nil {
 				return fmt.Errorf("error loading job %q: %w", path, err)
 			}

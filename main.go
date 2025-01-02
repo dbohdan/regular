@@ -14,21 +14,27 @@ import (
 	"github.com/alecthomas/kong"
 )
 
-type StartCmd struct{}
-
-type StatusCmd struct {
-	LogLines int    `help:"Number of log lines to show" short:"l" default:"${defaultLogLines}"`
-	JobName  string `arg:"" optional:"" default:"${allJobs}" help:"Show status for specific job only ('${allJobs}' for all)"`
-}
-
 type LogCmd struct {
 	LogLines int `help:"Number of log lines to show" short:"l" default:"${defaultLogLines}"`
 }
 
+type RunCmd struct {
+	Force bool     `short:"f" help:"Run jobs regardless of schedule"`
+	Jobs  []string `arg:"" optional:"" help:"Job names to run"`
+}
+
+type StartCmd struct{}
+
+type StatusCmd struct {
+	LogLines int    `help:"Number of log lines to show" short:"l" default:"${defaultLogLines}"`
+	JobName  string `arg:"" optional:"" default:"${allJobs}" help:"Show status for specific job only (\"${allJobs}\" for all)"`
+}
+
 type CLI struct {
+	Log    LogCmd    `cmd:"" help:"Show application log"`
+	Run    RunCmd    `cmd:"" help:"Run jobs once"`
 	Start  StartCmd  `cmd:"" help:"Start scheduler"`
 	Status StatusCmd `cmd:"" help:"Show job status"`
-	Log    LogCmd    `cmd:"" help:"Show application log"`
 
 	Version    VersionFlag `short:"V" help:"Print version number and exit"`
 	ConfigRoot string      `help:"Path to config directory" default:"${defaultConfigRoot}" type:"path"`

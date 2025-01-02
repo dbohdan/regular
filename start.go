@@ -32,7 +32,7 @@ func runService(config Config) error {
 		}
 
 		if filepath.Base(path) == jobFileName {
-			_, err := jobs.update(config.ConfigRoot, path)
+			_, _, err := jobs.update(config.ConfigRoot, path)
 			if err != nil {
 				logJobPrintf(jobNameFromPath(path), "Error at startup: %v", err)
 			}

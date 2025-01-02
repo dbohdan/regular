@@ -68,7 +68,7 @@ func (jsc jobScheduler) schedule(runner jobRunner) error {
 	return nil
 }
 
-func (jsc jobScheduler) update(configRoot, jobPath string) (updateJobsResult, error) {
+func (jsc jobScheduler) update(configRoot, jobPath string) (updateJobsResult, *JobConfig, error) {
 	jobDir := jobDir(jobPath)
 	jobName := jobNameFromPath(jobPath)
 
@@ -85,7 +85,7 @@ func (jsc jobScheduler) update(configRoot, jobPath string) (updateJobsResult, er
 	} {
 		newEnv, err := envfile.Load(envItem.path, true, env)
 		if err != nil {
-			return jobsNoChanges, fmt.Errorf("failed to load %s env file: %v", envItem.name, err)
+			return jobsNoChanges, nil, fmt.Errorf("failed to load %s env file: %v", envItem.name, err)
 		}
 
 		env = envfile.Merge(env, newEnv)
@@ -95,7 +95,7 @@ func (jsc jobScheduler) update(configRoot, jobPath string) (updateJobsResult, er
 
 	job, err := loadJob(env, jobPath)
 	if err != nil {
-		return jobsNoChanges, fmt.Errorf("failed to load job: %v", err)
+		return jobsNoChanges, nil, fmt.Errorf("failed to load job: %v", err)
 	}
 
 	jsc.mu.Lock()
@@ -104,10 +104,10 @@ func (jsc jobScheduler) update(configRoot, jobPath string) (updateJobsResult, er
 	jsc.mu.Unlock()
 
 	if exists {
-		return jobsUpdated, nil
+		return jobsUpdated, &job, nil
 	}
 
-	return jobsAddedNew, nil
+	return jobsAddedNew, &job, nil
 }
 
 func (jsc jobScheduler) remove(name string) error {
@@ -139,7 +139,7 @@ func (jsc jobScheduler) watchChanges(configRoot string, watcher *fsnotify.Watche
 			handleUpdate := func(updatePath string) {
 				jobName := jobNameFromPath(updatePath)
 
-				res, err := jsc.update(configRoot, updatePath)
+				res, _, err := jsc.update(configRoot, updatePath)
 				if err != nil {
 					removeErr := jsc.remove(jobName)
 
