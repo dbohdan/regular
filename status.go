@@ -74,7 +74,7 @@ func (s *StatusCmd) Run(config Config) error {
 		}
 
 		fmt.Println("    enabled:", map[bool]string{true: "yes", false: "no"}[job.Enabled])
-		fmt.Println("    jitter:", map[time.Duration]string{0: "none"}[job.Jitter])
+		fmt.Println("    jitter:", formatDuration(job.Jitter))
 		fmt.Println("    queue:", job.QueueName())
 
 		completed, err := db.getLastCompleted(job.Name)

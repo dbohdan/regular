@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"github.com/adrg/xdg"
@@ -62,4 +63,22 @@ func jobDir(path string) string {
 
 func jobNameFromPath(path string) string {
 	return filepath.Base(filepath.Dir(path))
+}
+
+// Format a `Duration` without the trailing zero units.
+func formatDuration(d time.Duration) string {
+	d = d.Round(time.Millisecond)
+
+	if d > time.Second {
+		d = d.Round(100 * time.Millisecond)
+	}
+
+	zeroUnits := regexp.MustCompile("(^|[^0-9])(?:0h)?(?:0m)?(?:0s)?$")
+	s := zeroUnits.ReplaceAllString(d.String(), "$1")
+
+	if s == "" {
+		return "0"
+	}
+
+	return s
 }

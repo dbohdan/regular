@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,6 +103,13 @@ func (r jobRunner) runQueueHead(queueName string) error {
 	r.queues[queueName] = queue
 	jobStateDir := filepath.Join(r.stateRoot, job.Name)
 	r.mu.Unlock()
+
+	if job.Jitter > 0 {
+		sleepDuration := time.Duration(job.Jitter.Seconds()*rand.Float64()) * time.Second
+		logJobPrintf(job.Name, "Waiting %v before start", formatDuration(sleepDuration))
+
+		time.Sleep(sleepDuration)
+	}
 
 	cj := CompletedJob{}
 	cj.Started = time.Now()
