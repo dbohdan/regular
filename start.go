@@ -2,18 +2,34 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/gofrs/flock"
 )
 
 func (r *StartCmd) Run(config Config) error {
-	return runService(config)
+	withLog(func() error {
+		return runService(config)
+	})
+
+	return nil
 }
 
 func runService(config Config) error {
+	lockPath := filepath.Join(config.StateRoot, appLockFileName)
+	fileLock := flock.New(lockPath)
+
+	locked, err := fileLock.TryLock()
+	if err != nil {
+		return fmt.Errorf("error checking lock file: %w", err)
+	}
+	if !locked {
+		return fmt.Errorf("another instance is already running")
+	}
+	defer fileLock.Unlock()
+
 	jobs := newJobScheduler()
 
 	watcher, err := fsnotify.NewWatcher()
@@ -41,7 +57,7 @@ func runService(config Config) error {
 		return nil
 	})
 	if err != nil {
-		log.Fatalf("Error walking config dir: %v", err)
+		return fmt.Errorf("error walking config dir: %w", err)
 	}
 
 	db, err := openAppDB(config.StateRoot)

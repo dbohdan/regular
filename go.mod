@@ -8,6 +8,7 @@ require (
 	github.com/alecthomas/repr v0.4.0
 	github.com/bep/debounce v1.2.1
 	github.com/fsnotify/fsnotify v1.8.0
+	github.com/gofrs/flock v0.12.1
 	github.com/mna/starstruct v0.0.0-20230205201804-e87b5f6cbd2d
 	github.com/nxadm/tail v1.4.11
 	github.com/xhit/go-simple-mail/v2 v2.16.0

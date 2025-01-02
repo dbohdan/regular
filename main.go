@@ -73,10 +73,12 @@ func capitalizeFirst(s string) string {
 
 func withLog(f func() error) {
 	if err := f(); err != nil {
+		msg := capitalizeFirst(err.Error())
+
 		if je, ok := err.(*JobError); ok {
-			logJobPrintf(je.JobName, "%v", capitalizeFirst(je.Err.Error()))
+			logJobPrintf(je.JobName, "%v", msg)
 		} else {
-			log.Printf("%v", err)
+			log.Printf("%v", msg)
 		}
 	}
 }
