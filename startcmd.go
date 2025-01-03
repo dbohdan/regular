@@ -57,7 +57,7 @@ func runService(config Config) error {
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("error walking config dir: %w", err)
+		return fmt.Errorf("error looking for jobs in config dir: %w", err)
 	}
 
 	db, err := openAppDB(config.StateRoot)

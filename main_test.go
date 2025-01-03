@@ -188,7 +188,7 @@ func TestStatusInvalidConfigDir(t *testing.T) {
 		t.Error("Expected error for invalid config directory")
 	}
 
-	if !strings.Contains(stdout, "no such file") {
-		t.Error("Expected 'no such file' in stdout")
+	if !strings.Contains(stdout, "error looking for jobs in config dir") {
+		t.Error("Expected 'error looking for jobs in config dir' in stdout")
 	}
 }

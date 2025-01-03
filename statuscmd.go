@@ -28,14 +28,14 @@ func (s *StatusCmd) Run(config Config) error {
 		if !info.IsDir() && filepath.Base(path) == jobFileName {
 			_, _, err := jobs.update(config.ConfigRoot, path)
 			if err != nil {
-				return fmt.Errorf("error loading job %q: %w", path, err)
+				return err
 			}
 		}
 
 		return nil
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("error looking for jobs in config dir: %v", err)
 	}
 
 	db, err := openAppDB(config.StateRoot)
