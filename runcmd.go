@@ -28,7 +28,7 @@ func (r *RunCmd) Run(config Config) error {
 			return nil
 		}
 
-		// Either force-run or check `should_run`.
+		// Either force-run or check should_run.
 		if r.Force {
 			runner.addJob(*job)
 		} else {

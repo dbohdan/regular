@@ -199,7 +199,7 @@ func TestEnvStrings(t *testing.T) {
 	}
 }
 
-// Returns true if two `Env` maps are equal.
+// Returns true if two Env maps are equal.
 func mapsEqual(a, b Env) bool {
 	if len(a) != len(b) {
 		return false

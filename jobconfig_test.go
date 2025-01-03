@@ -114,7 +114,7 @@ def should_run(**_):
 		t.Errorf(`Env["INITIAL_VAR"] = %q, want "initial_value"`, v)
 	}
 
-	// Test the `should_run` function.
+	// Test the should_run function.
 	thread := &starlark.Thread{Name: "test"}
 	result, err := starlark.Call(thread, job.ShouldRun, nil, nil)
 	if err != nil {

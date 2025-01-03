@@ -48,7 +48,7 @@ func (s *StatusCmd) Run(config Config) error {
 
 	seenNames := make(map[string]struct{})
 
-	// We iterate over a copy of `selectedNames` instead of the keys of `jobs.byName` to preserve order.
+	// We iterate over a copy of selectedNames instead of the keys of jobs.byName to preserve order.
 	selectedNames := s.JobNames[:]
 	if len(selectedNames) == 0 {
 		for name := range jobs.byName {

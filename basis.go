@@ -72,7 +72,7 @@ func boolYesNo(b bool) string {
 	return "no"
 }
 
-// Format a `Duration` without the trailing zero units.
+// Format a Duration without the trailing zero units.
 func formatDuration(d time.Duration) string {
 	d = d.Round(time.Millisecond)
 

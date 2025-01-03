@@ -52,12 +52,12 @@ func TestJobRunnerDB(t *testing.T) {
 		{name: "stderr", path: stderrPath},
 	}
 
-	// Test `saveCompletedJob`.
+	// Test saveCompletedJob.
 	if err := db.saveCompletedJob(jobName, completed, logs); err != nil {
 		t.Errorf("Failed to save completed job: %v", err)
 	}
 
-	// Test `getLastCompleted`.
+	// Test getLastCompleted.
 	lastCompleted, err := db.getLastCompleted(jobName)
 	if err != nil {
 		t.Errorf("Failed to get last completed job: %v", err)
@@ -75,7 +75,7 @@ func TestJobRunnerDB(t *testing.T) {
 		t.Errorf("Expected exit status %d, got %d", completed.ExitStatus, lastCompleted.ExitStatus)
 	}
 
-	// Test `getJobLogs`.
+	// Test getJobLogs.
 	stdoutLogs, err := db.getJobLogs(jobName, "stdout", 10)
 	if err != nil {
 		t.Errorf("Failed to get stdout logs: %v", err)
