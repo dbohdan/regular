@@ -40,7 +40,7 @@ tasks:
     deps:
       - build_regular
     cmds:
-      - VERSION=$(./regular{{.ext}} version) go run script/release.go
+      - VERSION=$(./regular{{.ext}} --version) go run script/release.go
 
   test:
     desc: 'Run tests'
