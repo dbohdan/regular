@@ -49,11 +49,11 @@ func command(args ...string) (string, string, error) {
 	return stdout.String(), stderr.String(), err
 }
 
-func commandWithDirs(tempRoot string, args ...string) (string, string, error) {
-	configRoot := filepath.Join(tempRoot, "config")
-	stateRoot := filepath.Join(tempRoot, "state")
+func commandWithDirs(tempDir string, args ...string) (string, string, error) {
+	configDir := filepath.Join(tempDir, "config")
+	stateDir := filepath.Join(tempDir, "state")
 	allArgs := append(
-		[]string{"--config-root", configRoot, "--state-root", stateRoot},
+		[]string{"--config-dir", configDir, "--state-dir", stateDir},
 		args...,
 	)
 
@@ -182,7 +182,7 @@ func TestStatusLogLines(t *testing.T) {
 }
 
 func TestStatusInvalidConfigDir(t *testing.T) {
-	stdout, _, err := command("status", "--config-root", "/nonexistent/path")
+	stdout, _, err := command("status", "--config-dir", "/nonexistent/path")
 
 	if _, ok := err.(*exec.ExitError); !ok {
 		t.Error("Expected error for invalid config directory")

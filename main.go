@@ -40,8 +40,8 @@ type CLI struct {
 	Status StatusCmd `cmd:"" help:"Show job status"`
 
 	Version    VersionFlag `short:"V" help:"Print version number and exit"`
-	ConfigRoot string      `short:"c" help:"Path to config directory" default:"${defaultConfigRoot}" type:"path"`
-	StateRoot  string      `short:"s" help:"Path to state directory" default:"${defaultStateRoot}" type:"path"`
+	ConfigRoot string      `name:"config-dir" short:"c" help:"Path to config directory" default:"${defaultConfigRoot}" type:"path"`
+	StateRoot  string      `name:"state-dir" short:"s" help:"Path to state directory" default:"${defaultStateRoot}" type:"path"`
 }
 
 type VersionFlag string

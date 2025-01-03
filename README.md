@@ -75,8 +75,9 @@ BACKUP_OPTS=--compress
 - **regular** [_flags_] _command_
     - **-h**, **--help** Print help
     - **-V**, **--version** Print version number and exit
-    - **-c**, **--config-root** Path to config directory
-    - **-s**, **--state-root** Path to state directory
+    - **-c**, **--config-dir** Path to config directory
+    - **-s**, **--state-dir** Path to state directory
+docs(*): remove '`' from comments
 
 ### Commands
 
