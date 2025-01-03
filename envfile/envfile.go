@@ -1,3 +1,6 @@
+// Package envfile parses and manipulates environment variable files ("env files").
+// It supports shell-style variable substitution, quoted values, comments,
+// environment merging, and conversion between string slices and its own environment map type.
 package envfile
 
 import (
@@ -11,8 +14,10 @@ import (
 	"strings"
 )
 
+// Env represents a mapping of environment variable names to their values.
 type Env map[string]string
 
+// Keys returns a sorted slice of environment variable names.
 func (e Env) Keys() []string {
 	keys := []string{}
 
@@ -24,6 +29,7 @@ func (e Env) Keys() []string {
 	return keys
 }
 
+// Strings converts the environment map to a slice of "KEY=VALUE" strings.
 func (e Env) Strings() []string {
 	pairs := []string{}
 
@@ -34,6 +40,7 @@ func (e Env) Strings() []string {
 	return pairs
 }
 
+// EnvFromStrings creates an Env from a slice of "KEY=VALUE" strings.
 func EnvFromStrings(strs []string) Env {
 	env := make(Env)
 
@@ -51,8 +58,8 @@ func EnvFromStrings(strs []string) Env {
 	return env
 }
 
-// `Parse` reads environment variables from a reader and returns them as a map.
-// If `subst` is true, it substitutes variables from the same env file and `substEnv`.
+// Parse reads environment variables from an io.Reader and returns them as a map.
+// If subst is true, it substitutes variables from the same env file and substEnv.
 func Parse(r io.Reader, subst bool, substEnv Env) (Env, error) {
 	if substEnv == nil {
 		substEnv = make(Env)
@@ -143,6 +150,8 @@ func Parse(r io.Reader, subst bool, substEnv Env) (Env, error) {
 	return env, nil
 }
 
+// Load reads and parses an environment file at the given path.
+// If subst is true, it performs variable substitution using values from the same file and substEnv.
 func Load(filePath string, subst bool, substEnv Env) (Env, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
@@ -153,10 +162,13 @@ func Load(filePath string, subst bool, substEnv Env) (Env, error) {
 	return Parse(f, subst, substEnv)
 }
 
+// OS returns the current process environment as an Env.
 func OS() Env {
 	return EnvFromStrings(os.Environ())
 }
 
+// Merge combines multiple environments into a single Env.
+// Later environments override values from earlier ones.
 func Merge(envs ...Env) Env {
 	merged := make(Env)
 

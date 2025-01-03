@@ -122,9 +122,9 @@ You can use the [**sqlite3** command shell](https://www.sqlite.org/cli.html) to 
 
 All files and directories are created with 0600 and 0700 permissions respectively.
 
-## `envfile` package
+## envfile package
 
-The `envfile` package can parse and manipulate environment variable files ("env files").
+The envfile package can parse and manipulate environment variable files ("env files").
 It can be used as a standalone library in your Go projects:
 
 ```go
@@ -160,7 +160,7 @@ env, err := envfile.Parse(content, true, nil)
 Load from a file:
 
 ```go
-// Use the contents of `os.Environ` for subtitution.
+// Use the contents of os.Environ for subtitution.
 substEnv := envfile.OS()
 env, err := envfile.Load(".env", true, substEnv)
 ```
