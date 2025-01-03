@@ -61,7 +61,7 @@ duplicate = False
 enabled = True
 ```
 
-Each job directory can also have an optional `env` file with environment variables:
+Each job directory can also have an optional `job.env` file with environment variables:
 
 ```
 PATH=${PATH}:${HOME}/bin
@@ -106,8 +106,9 @@ List available jobs:
 Default paths (override with **-c** and **-s**):
 
 - Config: `~/.config/regular/`
-  - Job configs: `~/.config/regular/<job>/job.star`
-  - Environment: `~/.config/regular/<job>/env`
+  - Global environment: `~/.config/regular/global.env`
+  - Job config: `~/.config/regular/<job>/job.star`
+  - Job environment: `~/.config/regular/<job>/job.env`
 
 - State: `~/.local/state/regular/`
   - App log: `~/.local/state/regular/app.log`
@@ -125,7 +126,7 @@ All files and directories are created with 0600 and 0700 permissions respectivel
 
 ## envfile package
 
-The envfile package can parse and manipulate environment variable files ("env files").
+The envfile package can parse `.env` files and manipulate their contents.
 It can be used as a standalone library in your Go projects:
 
 ```go
@@ -134,7 +135,7 @@ import "dbohdan.com/regular/envfile"
 
 ### Features
 
-- Parses environment files with shell-style variable substitution
+- Parses `.env` files with shell-style variable substitution
 - Supports quoted values.
   Single quotes disable substitution.
 - Handles comments and empty lines
@@ -143,7 +144,7 @@ import "dbohdan.com/regular/envfile"
 
 ### Examples
 
-Parse an environment file with variable substitution:
+Parse a `.env` file with variable substitution:
 
 ```go
 content := strings.NewReader(`

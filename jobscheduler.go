@@ -73,8 +73,8 @@ func (jsc jobScheduler) update(configRoot, jobPath string) (updateJobsResult, *J
 	jobName := jobNameFromPath(jobPath)
 
 	env := envfile.OS()
-	globalEnvPath := filepath.Join(configRoot, envFileName)
-	jobEnvPath := filepath.Join(jobDir, envFileName)
+	globalEnvPath := filepath.Join(configRoot, globalEnvFileName)
+	jobEnvPath := filepath.Join(jobDir, jobEnvFileName)
 
 	for _, envItem := range []struct {
 		name string
