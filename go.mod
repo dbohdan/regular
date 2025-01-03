@@ -7,6 +7,7 @@ require (
 	github.com/alecthomas/kong v1.6.0
 	github.com/alecthomas/repr v0.4.0
 	github.com/bep/debounce v1.2.1
+	github.com/fatih/color v1.18.0
 	github.com/fsnotify/fsnotify v1.8.0
 	github.com/gofrs/flock v0.12.1
 	github.com/mna/starstruct v0.0.0-20230205201804-e87b5f6cbd2d
@@ -23,6 +24,7 @@ require (
 	github.com/go-test/deep v1.1.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect

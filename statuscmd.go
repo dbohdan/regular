@@ -5,9 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
-	"time"
 
+	"github.com/fatih/color"
 	"golang.org/x/term"
 
 	"dbohdan.com/regular/envfile"
@@ -53,9 +54,11 @@ func (s *StatusCmd) Run(config Config) error {
 		for name := range jobs.byName {
 			selectedNames = append(selectedNames, name)
 		}
+
+		slices.Sort(selectedNames)
 	}
 
-	for _, name := range selectedNames {
+	for i, name := range selectedNames {
 		job, ok := jobs.byName[name]
 		if !ok {
 			continue
@@ -78,16 +81,18 @@ func (s *StatusCmd) Run(config Config) error {
 			}
 		}
 
+		color.Set(color.Bold)
 		fmt.Println(name)
-		fmt.Println("    dir:", filepath.Join(config.ConfigRoot, name))
+		color.Unset()
+
 		fmt.Println("    duplicate:", boolYesNo(job.Duplicate))
 
 		if len(job.Env) == 0 {
 			fmt.Println("    env: none")
 		} else {
 			fmt.Println("    env:")
-			for k, v := range job.Env {
-				fmt.Printf("        %v: %v\n", k, v)
+			for _, k := range job.Env.Keys() {
+				fmt.Printf("        %v: %v\n", k, job.Env[k])
 			}
 		}
 
@@ -101,12 +106,12 @@ func (s *StatusCmd) Run(config Config) error {
 		}
 
 		if completed == nil {
-			fmt.Println("    last start: unknown")
-			fmt.Println("    run time: unknown")
+			fmt.Println("    last started:  unknown")
+			fmt.Println("    last finished: unknown")
 			fmt.Println("    exit status: unknown")
 		} else {
-			fmt.Println("    last start:", completed.Started.Format(timestampFormat))
-			fmt.Println("    run time:", completed.Finished.Sub(completed.Started).Round(time.Second))
+			fmt.Println("    last started: ", completed.Started.Format(timestampFormat))
+			fmt.Println("    last finished:", completed.Finished.Format(timestampFormat))
 			fmt.Println("    exit status:", completed.ExitStatus)
 		}
 
@@ -142,7 +147,9 @@ func (s *StatusCmd) Run(config Config) error {
 			fmt.Println(separator)
 		}
 
-		fmt.Println()
+		if i != len(selectedNames)-1 {
+			fmt.Println()
+		}
 	}
 
 	return nil
