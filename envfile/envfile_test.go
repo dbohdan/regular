@@ -31,8 +31,14 @@ func TestParse(t *testing.T) {
 			want:  Env{"QUOTED": "hello world", "SINGLE": "no subst ${VAR}"},
 		},
 		{
-			name:  "substitution",
+			name:  "substitution, braces",
 			input: "BASE=/opt\nPATH=${BASE}/bin",
+			subst: true,
+			want:  Env{"BASE": "/opt", "PATH": "/opt/bin"},
+		},
+		{
+			name:  "substitution, no braces",
+			input: "BASE=/opt\nPATH=$BASE/bin",
 			subst: true,
 			want:  Env{"BASE": "/opt", "PATH": "/opt/bin"},
 		},
@@ -70,8 +76,10 @@ func TestParse(t *testing.T) {
 				return
 			}
 
-			if !tt.wantErr && !mapsEqual(got, tt.want) {
-				t.Errorf("Parse() = %q, want %q", got, tt.want)
+			if !tt.wantErr {
+				if equal, diffs := mapsEqual(got, tt.want); !equal {
+					t.Errorf("Parse() got different values for keys %q\ngot: %q\nwant: %q", diffs, got, tt.want)
+				}
 			}
 		})
 	}
@@ -103,8 +111,8 @@ func TestEnvFromStrings(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := EnvFromStrings(tt.input)
-			if !mapsEqual(got, tt.want) {
-				t.Errorf("EnvFromStrings() = %v, want %v", got, tt.want)
+			if equal, diffs := mapsEqual(got, tt.want); !equal {
+				t.Errorf("EnvFromStrings() got different values for keys %q\ngot: %v\nwant: %v", diffs, got, tt.want)
 			}
 		})
 	}
@@ -146,8 +154,8 @@ func TestMerge(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := Merge(tt.envs...)
-			if !mapsEqual(got, tt.want) {
-				t.Errorf("Merge() = %v, want %v", got, tt.want)
+			if equal, diffs := mapsEqual(got, tt.want); !equal {
+				t.Errorf("Merge() got different values for keys %q\ngot: %q\nwant: %v", diffs, got, tt.want)
 			}
 		})
 	}
@@ -199,17 +207,14 @@ func TestEnvStrings(t *testing.T) {
 	}
 }
 
-// Returns true if two Env maps are equal.
-func mapsEqual(a, b Env) bool {
-	if len(a) != len(b) {
-		return false
-	}
+func mapsEqual(a, b Env) (bool, []string) {
+	diffs := []string{}
 
 	for k, v := range a {
-		if bv, ok := b[k]; !ok || bv != v {
-			return false
+		if bv, ok := b[k]; ok && bv != v {
+			diffs = append(diffs, k)
 		}
 	}
 
-	return true
+	return len(diffs) == 0, diffs
 }

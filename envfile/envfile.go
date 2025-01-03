@@ -4,12 +4,9 @@
 package envfile
 
 import (
-	"bufio"
-	"fmt"
 	"io"
 	"maps"
 	"os"
-	"regexp"
 	"slices"
 	"strings"
 )
@@ -61,89 +58,9 @@ func EnvFromStrings(strs []string) Env {
 // Parse reads environment variables from an io.Reader and returns them as a map.
 // If subst is true, it substitutes variables from the same env file and substEnv.
 func Parse(r io.Reader, subst bool, substEnv Env) (Env, error) {
-	if substEnv == nil {
-		substEnv = make(Env)
-	}
-
-	env := make(Env)
-	lookupEnv := func(key string) (string, error) {
-		if val, exists := env[key]; exists {
-			return val, nil
-		}
-
-		if val, exists := substEnv[key]; exists {
-			return val, nil
-		}
-
-		return "", fmt.Errorf("can't substitute env variable: %q", key)
-	}
-
-	re := regexp.MustCompile(`\$\{([^}=]+)\}`)
-
-	replacement := func(value string) (string, error) {
-		var lastErr error
-
-		result := re.ReplaceAllStringFunc(value, func(match string) string {
-			varName := re.FindStringSubmatch(match)[1]
-
-			subValue, err := lookupEnv(varName)
-			if err != nil {
-				lastErr = err
-				return match
-			}
-
-			return subValue
-		})
-		if lastErr != nil {
-			return "", lastErr
-		}
-
-		return result, nil
-	}
-
-	scanner := bufio.NewScanner(r)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-
-		// Skip comments and empty lines.
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		// Parse a key-value pair.
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("can't parse env file line: %q", line)
-		}
-
-		key := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-
-		doubleQuoted := strings.HasPrefix(value, `"`) && strings.HasSuffix(value, `"`)
-		singleQuoted := strings.HasPrefix(value, "'") && strings.HasSuffix(value, "'")
-
-		// Remove the surrounding quotes and handle substitution.
-		substEnabled := subst
-		if len(value) > 1 && (doubleQuoted || singleQuoted) {
-			if singleQuoted {
-				substEnabled = false
-			}
-
-			value = value[1 : len(value)-1]
-		}
-
-		if substEnabled {
-			var err error
-			value, err = replacement(value)
-			if err != nil {
-				return nil, fmt.Errorf("error substituting value for key %q: %w", key, err)
-			}
-		}
-
-		env[key] = value
-	}
-
-	if err := scanner.Err(); err != nil {
+	parser := newParser(r, subst, substEnv)
+	env, err := parser.parse()
+	if err != nil {
 		return nil, err
 	}
 

@@ -129,18 +129,22 @@ All files and directories are created with 0600 and 0700 permissions respectivel
 The envfile package can parse `.env` files and manipulate their contents.
 It can be used as a standalone library in your Go projects:
 
-```go
-import "dbohdan.com/regular/envfile"
+```shell
+go get dbohdan.com/regular/envfile
 ```
+
+envfile is mostly compatible with [GoDotEnv](https://github.com/joho/godotenv).
+It is tested against test fixtures from GoDoEnv.
+The only major difference is that attempting to substitute a nonexistent variable results in an error.
+However, `.env` files have no formal specification, and differences in parsing around edge cases are to be expected.
 
 ### Features
 
-- Parses `.env` files with shell-style variable substitution
-- Supports quoted values.
-  Single quotes disable substitution.
-- Handles comments and empty lines
-- Can merge environments
-- Converts between `[]string{"FOO=bar", ...}` and its own environment map type
+- Parse `.env` files with quoted multiline values, backslash escape sequences, and comments
+- Perform optional shell-style variable substitution
+- Control substitution in the file by using either double/no quotes or single quotes
+- Merge environments
+- Convert between `[]string{"FOO=bar", ...}` and an environment map type
 
 ### Examples
 
@@ -156,7 +160,6 @@ PATH=${BASE}/bin
 
 env, err := envfile.Parse(content, true, nil)
 // env = map[string]string{"BASE": "/opt", "PATH": "/opt/bin"}
-}
 ```
 
 Load from a file:
