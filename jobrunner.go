@@ -121,16 +121,28 @@ func (r jobRunner) runQueueHead(queueName string) error {
 	var stdoutFile io.Writer
 	var stderrFile io.Writer
 	if job.Log {
-		stdoutFile, _ = os.OpenFile(
+		if err := os.MkdirAll(jobStateDir, dirPerms); err != nil {
+			return newJobError(job.Name, fmt.Errorf("failed to create job state directory: %w", err))
+		}
+
+		var err error
+		stdoutFile, err = os.OpenFile(
 			stdoutFilePath,
 			os.O_CREATE|os.O_TRUNC|os.O_WRONLY,
 			filePerms,
 		)
-		stderrFile, _ = os.OpenFile(
+		if err != nil {
+			return newJobError(job.Name, fmt.Errorf("failed to create stdout log file: %w", err))
+		}
+
+		stderrFile, err = os.OpenFile(
 			stderrFilePath,
 			os.O_CREATE|os.O_TRUNC|os.O_WRONLY,
 			filePerms,
 		)
+		if err != nil {
+			return newJobError(job.Name, fmt.Errorf("failed to create stderr log file: %w", err))
+		}
 	}
 
 	runErr := runScript(job.Name, job.Env, job.Script, nil, stdoutFile, stderrFile)
