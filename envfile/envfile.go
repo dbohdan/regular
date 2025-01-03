@@ -7,16 +7,28 @@ import (
 	"maps"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 )
 
 type Env map[string]string
 
+func (e Env) Keys() []string {
+	keys := []string{}
+
+	for k := range e {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+
+	return keys
+}
+
 func (e Env) Strings() []string {
 	pairs := []string{}
 
-	for k, v := range e {
-		pairs = append(pairs, k+"="+v)
+	for _, k := range e.Keys() {
+		pairs = append(pairs, k+"="+e[k])
 	}
 
 	return pairs

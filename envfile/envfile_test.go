@@ -153,7 +153,30 @@ func TestMerge(t *testing.T) {
 	}
 }
 
-func TestEnv_Strings(t *testing.T) {
+func TestKeys(t *testing.T) {
+	env := Env{
+		"FOO": "bar",
+		"BAZ": "qux",
+	}
+
+	got := env.Keys()
+	if len(got) != 2 {
+		t.Errorf("Keys() returned %d items, want 2", len(got))
+	}
+
+	want := map[string]bool{
+		"FOO": true,
+		"BAZ": true,
+	}
+
+	for _, s := range got {
+		if !want[s] {
+			t.Errorf("Keys() unexpected value: %s", s)
+		}
+	}
+}
+
+func TestEnvStrings(t *testing.T) {
 	env := Env{
 		"FOO": "bar",
 		"BAZ": "qux",
