@@ -40,7 +40,8 @@ func createTempDir(t *testing.T) string {
 }
 
 func command(args ...string) (string, string, error) {
-	cmd := exec.Command(commandRegular, args...)
+	fullArgs := append([]string{"--output", "-"}, args...)
+	cmd := exec.Command(commandRegular, fullArgs...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
