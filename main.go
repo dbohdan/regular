@@ -41,6 +41,7 @@ type CLI struct {
 
 	Version    VersionFlag `short:"V" help:"Print version number and exit"`
 	ConfigRoot string      `name:"config-dir" short:"c" help:"Path to config directory" default:"${defaultConfigRoot}" type:"path"`
+	Output     string      `short:"o" help:"Path to text file where to write the log in addition to stdout (\"-\" for only stdout)" default:"${defaultLogPath}" type:"path"`
 	StateRoot  string      `name:"state-dir" short:"s" help:"Path to state directory" default:"${defaultStateRoot}" type:"path"`
 }
 
@@ -109,24 +110,9 @@ func logJobPrintf(job, format string, v ...any) {
 }
 
 func main() {
-	log.SetFlags(0)
+	log.SetOutput(&logWriter{tee: nil})
 
-	db, err := openAppDB(defaultStateRoot)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to open app database: %v\n", err)
-		os.Exit(1)
-	}
-	defer db.close()
-
-	logPath := filepath.Join(defaultStateRoot, appLogFileName)
-	logFile, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, filePerms)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to open app log file: %v\n", err)
-		os.Exit(1)
-	}
-	defer logFile.Close()
-
-	log.SetOutput(&logWriter{tee: logFile})
+	defaultLogPath := filepath.Join(defaultStateRoot, appLogFileName)
 
 	cli := CLI{}
 	ctx := kong.Parse(&cli,
@@ -145,14 +131,33 @@ func main() {
 		kong.Vars{
 			"defaultConfigRoot": defaultConfigRoot,
 			"defaultLogLines":   strconv.Itoa(defaultLogLines),
+			"defaultLogPath":    defaultLogPath,
 			"defaultStateRoot":  defaultStateRoot,
 		},
 	)
+
+	if cli.Output != "-" {
+		logFile, err := os.OpenFile(cli.Output, os.O_APPEND|os.O_CREATE|os.O_WRONLY, filePerms)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to open app log file: %v\n", err)
+			os.Exit(1)
+		}
+		defer logFile.Close()
+
+		log.SetOutput(&logWriter{tee: logFile})
+	}
 
 	config := Config{
 		ConfigRoot: cli.ConfigRoot,
 		StateRoot:  cli.StateRoot,
 	}
+
+	db, err := openAppDB(cli.StateRoot)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to open app database: %v\n", err)
+		os.Exit(1)
+	}
+	defer db.close()
 
 	err = ctx.Run(config)
 	if err != nil {
