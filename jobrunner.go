@@ -72,13 +72,21 @@ func (r jobRunner) addJob(job JobConfig) {
 	queue.jobs = append(queue.jobs, job)
 	r.queues[queueName] = queue
 
-	logJobPrintf(
-		job.Name,
-		"Put job in runner queue of length %v: %v",
-		// Report the queue length before the job was added.
-		len(queue.jobs)-1,
-		queueName,
-	)
+	// Report the queue length before the job was added.
+	if len(queue.jobs) == 1 {
+		logJobPrintf(
+			job.Name,
+			"Put job in empty runner queue: %v",
+			queueName,
+		)
+	} else {
+		logJobPrintf(
+			job.Name,
+			"Put job in runner queue of length %v: %v",
+			len(queue.jobs)-1,
+			queueName,
+		)
+	}
 }
 
 func (r jobRunner) runQueueHead(queueName string) error {
