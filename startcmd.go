@@ -28,7 +28,9 @@ func runService(config Config) error {
 	if !locked {
 		return fmt.Errorf("another instance is already running")
 	}
-	defer fileLock.Unlock()
+	defer func() {
+		_ = fileLock.Unlock()
+	}()
 
 	jobs := newJobScheduler()
 

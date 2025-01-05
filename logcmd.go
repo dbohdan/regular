@@ -48,7 +48,9 @@ func tailFile(path string, maxLines int) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer t.Stop()
+	defer func() {
+		_ = t.Stop()
+	}()
 
 	// Collect the lines in a ring buffer.
 	lines := []string{}
