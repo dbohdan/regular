@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// Returns a version of the string quotes of the given shell interpreter.
+// Returns a version of the string quoted for the given shell interpreter.
 func Quote(s string, shell string) (string, error) {
 	switch shell {
 
