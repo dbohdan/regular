@@ -43,9 +43,7 @@ func (p *parser) parse() (Env, error) {
 		}
 
 		// Handle the "export" prefix.
-		if strings.HasPrefix(line, "export ") {
-			line = strings.TrimPrefix(line, "export ")
-		}
+		line = strings.TrimPrefix(line, "export ")
 
 		// Split at the first equals sign.
 		pos := strings.Index(line, "=")
