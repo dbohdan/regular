@@ -134,7 +134,7 @@ go get dbohdan.com/regular/envfile
 ```
 
 envfile is mostly compatible with [GoDotEnv](https://github.com/joho/godotenv).
-It is tested against test fixtures from GoDoEnv.
+It is tested against test fixtures imported from GoDotEnv.
 The only major difference is that attempting to substitute a nonexistent variable results in an error.
 However, `.env` files have no formal specification, and differences in parsing around edge cases are to be expected.
 
