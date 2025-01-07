@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -20,6 +21,8 @@ func (r *StartCmd) Run(config Config) error {
 func runService(config Config) error {
 	lockPath := filepath.Join(config.StateRoot, appLockFileName)
 	fileLock := flock.New(lockPath)
+
+	log.Print("Starting")
 
 	locked, err := fileLock.TryLock()
 	if err != nil {
