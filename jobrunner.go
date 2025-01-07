@@ -24,7 +24,7 @@ type jobRunner struct {
 	queues    map[string]jobQueue
 	stateRoot string
 
-	mu *sync.RWMutex
+	mu *sync.Mutex
 }
 
 func newJobRunner(db *appDB, notify notifyWhenDone, stateRoot string) (jobRunner, error) {
@@ -33,7 +33,7 @@ func newJobRunner(db *appDB, notify notifyWhenDone, stateRoot string) (jobRunner
 		notify:    notify,
 		queues:    make(map[string]jobQueue),
 		stateRoot: stateRoot,
-		mu:        &sync.RWMutex{},
+		mu:        &sync.Mutex{},
 	}, nil
 }
 
@@ -57,9 +57,6 @@ func (r jobRunner) addJob(job JobConfig) {
 		queue = newJobQueue()
 		r.queues[queueName] = queue
 	}
-
-	queue.mu.Lock()
-	defer queue.mu.Unlock()
 
 	if !job.Duplicate {
 		for _, otherJob := range queue.jobs {
@@ -89,28 +86,37 @@ func (r jobRunner) addJob(job JobConfig) {
 	}
 }
 
-func (r jobRunner) runQueueHead(queueName string) error {
-	r.mu.RLock()
+func (r jobRunner) activateQueueHead(queueName string) (*JobConfig, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	queue, ok := r.queues[queueName]
-	r.mu.RUnlock()
 
 	if !ok {
-		return fmt.Errorf("requested to run head of nonexistent queue: %v", queueName)
+		return nil, fmt.Errorf("requested to run head of nonexistent queue: %v", queueName)
 	}
 
 	if queue.activeJob || len(queue.jobs) == 0 {
+		return nil, nil
+	}
+
+	job := queue.jobs[0]
+
+	queue.activeJob = true
+	r.queues[queueName] = queue
+
+	return &job, nil
+}
+
+func (r jobRunner) runQueueHead(queueName string) error {
+	job, err := r.activateQueueHead(queueName)
+	if err != nil {
+		return err
+	}
+	if job == nil {
 		return nil
 	}
 
-	queue.mu.Lock()
-	job := queue.jobs[0]
-	queue.mu.Unlock()
-
-	r.mu.Lock()
-	queue.activeJob = true
-	r.queues[queueName] = queue
 	jobStateDir := filepath.Join(r.stateRoot, job.Name)
-	r.mu.Unlock()
 
 	if job.Jitter > 0 {
 		sleepDuration := time.Duration(job.Jitter.Seconds()*rand.Float64()) * time.Second
@@ -166,7 +172,7 @@ func (r jobRunner) runQueueHead(queueName string) error {
 	cj.Finished = time.Now()
 
 	r.mu.Lock()
-	queue, ok = r.queues[queueName]
+	queue, ok := r.queues[queueName]
 	if ok {
 		queue.activeJob = false
 		queue.jobs = queue.jobs[1:]
@@ -202,11 +208,11 @@ func (r jobRunner) run() {
 	for range ticker.C {
 		names := []string{}
 
-		r.mu.RLock()
+		r.mu.Lock()
 		for queueName, _ := range r.queues {
 			names = append(names, queueName)
 		}
-		r.mu.RUnlock()
+		r.mu.Unlock()
 
 		for _, queueName := range names {
 			go withLog(func() error {
