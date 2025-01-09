@@ -110,6 +110,7 @@ func logJobPrintf(job, format string, v ...any) {
 }
 
 func main() {
+	log.SetFlags(0)
 	log.SetOutput(&logWriter{tee: nil})
 
 	defaultLogPath := filepath.Join(defaultStateRoot, appLogFileName)
