@@ -1,4 +1,4 @@
-// Package envfile parses and manipulates environment variable files ("env files").
+// Package envfile parses .env files and manipulates their contents.
 // It supports shell-style variable substitution, quoted values, comments,
 // environment merging, and conversion between string slices and its own environment map type.
 package envfile
