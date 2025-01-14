@@ -86,6 +86,7 @@ func (s *StatusCmd) Run(config Config) error {
 		color.Unset()
 
 		fmt.Println("    duplicate:", boolYesNo(job.Duplicate))
+		fmt.Println("    enabled:", boolYesNo(job.Enabled))
 
 		if len(job.Env) == 0 {
 			fmt.Println("    env: none")
@@ -96,9 +97,10 @@ func (s *StatusCmd) Run(config Config) error {
 			}
 		}
 
-		fmt.Println("    enabled:", boolYesNo(job.Enabled))
 		fmt.Println("    jitter:", formatDuration(job.Jitter))
+		fmt.Println("    log:", boolYesNo(job.Log))
 		fmt.Println("    queue:", job.QueueName())
+		fmt.Println()
 
 		completed, err := db.getLastCompleted(job.Name)
 		if err != nil {
