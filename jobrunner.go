@@ -159,7 +159,9 @@ func (r jobRunner) runQueueHead(queueName string) error {
 		}
 	}
 
-	runErr := runScript(job.Name, job.Env, job.Script, nil, stdoutFile, stderrFile)
+	jobDir, _ := job.Env[jobDirEnvVar]
+
+	runErr := runScript(job.Name, job.Env, jobDir, job.Script, nil, stdoutFile, stderrFile)
 	cj.Error = ""
 	if runErr != nil {
 		cj.Error = runErr.Error()
@@ -244,7 +246,7 @@ func (r jobRunner) summarize() string {
 	return sb.String()
 }
 
-func runScript(jobName string, env envfile.Env, script string, stdin io.Reader, stdout, stderr io.Writer) error {
+func runScript(jobName string, env envfile.Env, dir, script string, stdin io.Reader, stdout, stderr io.Writer) error {
 	parser := shsyntax.NewParser()
 
 	prog, err := parser.Parse(strings.NewReader(script), jobName)
@@ -253,6 +255,7 @@ func runScript(jobName string, env envfile.Env, script string, stdin io.Reader, 
 	}
 
 	interpreter, err := interp.New(
+		interp.Dir(dir),
 		interp.Env(expand.ListEnviron(env.Strings()...)),
 		interp.StdIO(stdin, stdout, stderr),
 	)

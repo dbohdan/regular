@@ -159,7 +159,7 @@ func TestRunScript(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := runScript(tt.name, envfile.Env{}, tt.script, nil, nil, nil)
+			err := runScript(tt.name, envfile.Env{}, "", tt.script, nil, nil, nil)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("runScript() error = %v, wantErr %v", err, tt.wantErr)
 			}
