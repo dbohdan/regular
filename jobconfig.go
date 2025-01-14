@@ -154,6 +154,9 @@ func loadJob(env envfile.Env, path string) (JobConfig, error) {
 	enabledValue, exists := globals[enabledVar]
 	job.Enabled = !exists || enabledValue == starlark.True
 
+	logValue, exists := globals[logVar]
+	job.Log = !exists || logValue == starlark.True
+
 	finalEnvDict := envDict
 	_, exists = globals[envVar]
 	if exists {

@@ -25,6 +25,7 @@ const (
 
 	enabledVar    = "enabled"
 	envVar        = "env"
+	logVar        = "log"
 	notifyModeVar = "notify"
 	oneDayVar     = "one_day"
 	oneHourVar    = "one_hour"
