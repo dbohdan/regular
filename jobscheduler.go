@@ -35,12 +35,12 @@ func newJobScheduler() jobScheduler {
 	}
 }
 
-func (jsc jobScheduler) scheduleOnce(runner jobRunner) error {
+func (jsc jobScheduler) addDueJobsToQueue(runner jobRunner, t time.Time) error {
 	jsc.mu.RLock()
 	defer jsc.mu.RUnlock()
 
 	for name, job := range jsc.byName {
-		err := job.schedule(runner)
+		err := job.addToQueueIfDue(runner, t)
 		if err != nil {
 			return newJobError(name, fmt.Errorf("scheduling error: %w", err))
 		}
@@ -53,15 +53,34 @@ func (jsc jobScheduler) schedule(runner jobRunner) error {
 	ticker := time.NewTicker(scheduleInterval)
 	defer ticker.Stop()
 
-	err := jsc.scheduleOnce(runner)
+	current := time.Now()
+	var last time.Time
+
+	err := jsc.addDueJobsToQueue(runner, current)
 	if err != nil {
 		return err
 	}
 
 	for range ticker.C {
-		err := jsc.scheduleOnce(runner)
-		if err != nil {
-			return err
+		last = current
+		current = time.Now()
+
+		// Account for missed time.
+		// Do not run missed jobs if more than maxMissedTime has elapsed.
+		// On an overloaded system, the ticker can miss a minute.
+		// For example, this may happen because Regular was swapped out.
+		// It would prevent Regular from running jobs scheduled for that minute and that minute alone.
+		// The purpose of this approach is to catch up on missed jobs.
+		// However, we should run days' worth of missed jobs after system hibernation.
+		if current.Sub(last) > maxMissedTime {
+			last = current
+		}
+
+		for t := last; t.Before(current); t = t.Add(time.Minute) {
+			err := jsc.addDueJobsToQueue(runner, t)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"time"
 )
 
 func (r *RunCmd) Run(config Config) error {
@@ -18,6 +19,7 @@ func (r *RunCmd) Run(config Config) error {
 	}
 
 	jobs := newJobScheduler()
+	now := time.Now()
 
 	for _, jobName := range r.JobNames {
 		path := filepath.Join(config.ConfigRoot, jobName, jobFileName)
@@ -32,7 +34,7 @@ func (r *RunCmd) Run(config Config) error {
 		if r.Force {
 			runner.addJob(*job)
 		} else {
-			if err := job.schedule(runner); err != nil {
+			if err := job.addToQueueIfDue(runner, now); err != nil {
 				return fmt.Errorf("failed to schedule job %q: %w", job.Name, err)
 			}
 		}

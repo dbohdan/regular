@@ -33,14 +33,9 @@ func (j JobConfig) QueueName() string {
 	return j.Queue
 }
 
-func (j JobConfig) schedule(runner jobRunner) error {
+func (j JobConfig) shouldRun(t time.Time, lastCompleted *CompletedJob) (bool, error) {
 	if !j.Enabled {
-		return nil
-	}
-
-	lastCompleted, err := runner.lastCompleted(j.Name)
-	if err != nil {
-		return err
+		return false, nil
 	}
 
 	exitStatus := -1
@@ -52,31 +47,30 @@ func (j JobConfig) schedule(runner jobRunner) error {
 		started = int(lastCompleted.Started.Unix())
 	}
 
-	now := time.Now()
 	kvpairs := []starlark.Tuple{
 		starlark.Tuple{
 			starlark.String("minute"),
-			starlark.MakeInt(now.Minute()),
+			starlark.MakeInt(t.Minute()),
 		},
 		starlark.Tuple{
 			starlark.String("hour"),
-			starlark.MakeInt(now.Hour()),
+			starlark.MakeInt(t.Hour()),
 		},
 		starlark.Tuple{
 			starlark.String("day"),
-			starlark.MakeInt(now.Day()),
+			starlark.MakeInt(t.Day()),
 		},
 		starlark.Tuple{
 			starlark.String("month"),
-			starlark.MakeInt(int(now.Month())),
+			starlark.MakeInt(int(t.Month())),
 		},
 		starlark.Tuple{
 			starlark.String("dow"),
-			starlark.MakeInt(int(now.Weekday())),
+			starlark.MakeInt(int(t.Weekday())),
 		},
 		starlark.Tuple{
 			starlark.String("timestamp"),
-			starlark.MakeInt(int(now.Unix())),
+			starlark.MakeInt(int(t.Unix())),
 		},
 		starlark.Tuple{
 			starlark.String("exit_status"),
@@ -95,18 +89,35 @@ func (j JobConfig) schedule(runner jobRunner) error {
 	thread := &starlark.Thread{Name: "schedule"}
 	result, err := starlark.Call(thread, j.ShouldRun, nil, kvpairs)
 	if err != nil {
-		return fmt.Errorf(`failed to call "should_run": %v`, err)
+		return false, fmt.Errorf(`failed to call "should_run": %v`, err)
 	}
 
 	switch result {
 
 	case starlark.False:
+		return false, nil
 
 	case starlark.True:
-		runner.addJob(j)
+		return true, nil
 
 	default:
-		return fmt.Errorf(`"should_run" returned bad value: %v`, result)
+		return false, fmt.Errorf(`"should_run" returned bad value: %v`, result)
+	}
+}
+
+func (j JobConfig) addToQueueIfDue(runner jobRunner, t time.Time) error {
+	lastCompleted, err := runner.lastCompleted(j.Name)
+	if err != nil {
+		return err
+	}
+
+	shouldRun, err := j.shouldRun(t, lastCompleted)
+	if err != nil {
+		return err
+	}
+
+	if shouldRun {
+		runner.addJob(j)
 	}
 
 	return nil
