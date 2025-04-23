@@ -42,8 +42,6 @@ func main() {
 		{"linux", "arm64"},
 		{"linux", "riscv64"},
 		{"openbsd", "amd64"},
-		{"windows", "amd64"},
-		{"windows", "arm64"},
 	}
 
 	for _, target := range targets {
