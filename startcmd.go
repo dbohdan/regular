@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/gofrs/flock"
@@ -43,6 +44,7 @@ func runService(config Config) error {
 	}
 	defer watcher.Close()
 
+	loadedJobs := []string{}
 	err = filepath.Walk(config.ConfigRoot, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -53,9 +55,12 @@ func runService(config Config) error {
 		}
 
 		if filepath.Base(path) == jobConfigFileName {
+			jobName := jobNameFromPath(path)
 			_, _, err := jobs.update(config.ConfigRoot, path)
-			if err != nil {
-				logJobPrintf(jobNameFromPath(path), "Error at startup: %v", err)
+			if err == nil {
+				loadedJobs = append(loadedJobs, jobName)
+			} else {
+				logJobPrintf(jobName, "Error at startup: %v", err)
 			}
 		}
 
@@ -64,6 +69,7 @@ func runService(config Config) error {
 	if err != nil {
 		return fmt.Errorf("error looking for jobs in config dir: %w", err)
 	}
+	log.Print("Loaded jobs: " + strings.Join(loadedJobs, ", "))
 
 	db, err := openAppDB(config.StateRoot)
 	if err != nil {
