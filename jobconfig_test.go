@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"dbohdan.com/regular/envfile"
+	"github.com/google/go-cmp/cmp"
 	"go.starlark.net/starlark"
 )
 
@@ -53,6 +54,7 @@ func TestLoadJob(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	jobContent := `
+command = ["sleep", "1"]
 duplicate = False
 enabled = False
 env["TEST_VAR"] = "test_value"
@@ -60,10 +62,6 @@ jitter = 5
 log = True
 notify = "always"
 queue = "test-queue"
-
-script = """
-sleep 1
-"""
 
 def should_run(**_):
     return True
@@ -88,7 +86,7 @@ def should_run(**_):
 		expected interface{}
 	}{
 		{"Enabled", job.Enabled, false},
-		{"Script", job.Script, "\nsleep 1\n"},
+		{"Command", job.Command, []string{"sleep", "1"}},
 		{"Duplicate", job.Duplicate, false},
 		{"Log", job.Log, true},
 		{"Queue", job.Queue, "test-queue"},
@@ -99,7 +97,7 @@ def should_run(**_):
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.got != tt.expected {
+			if !cmp.Equal(tt.got, tt.expected) {
 				t.Errorf("%s = %v, want %v", tt.name, tt.got, tt.expected)
 			}
 		})

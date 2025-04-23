@@ -13,6 +13,7 @@ import (
 )
 
 type JobConfig struct {
+	Command   []string       `starlark:"command"`
 	Duplicate bool           `starlark:"duplicate"`
 	Enabled   bool           `starlark:"enabled"`
 	Env       envfile.Env    `starlark:"-"`
@@ -21,7 +22,6 @@ type JobConfig struct {
 	Name      string         `starlark:"-"`
 	Notify    notifyMode     `starlark:"-"`
 	Queue     string         `starlark:"queue"`
-	Script    string         `starlark:"script"`
 	ShouldRun starlark.Value `starlark:"should_run"`
 }
 
@@ -160,6 +160,10 @@ func loadJob(env envfile.Env, path string) (JobConfig, error) {
 
 	if err := starstruct.FromStarlark(stringDict, &job); err != nil {
 		return job, fmt.Errorf(`failed to convert job to struct: %w`, err)
+	}
+
+	if len(job.Command) == 0 {
+		job.Command = []string{"./run"}
 	}
 
 	enabledValue, exists := globals[enabledVar]

@@ -2,18 +2,16 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
-
-	"mvdan.cc/sh/v3/expand"
-	"mvdan.cc/sh/v3/interp"
-	shsyntax "mvdan.cc/sh/v3/syntax"
 
 	"dbohdan.com/regular/envfile"
 )
@@ -161,13 +159,14 @@ func (r jobRunner) runQueueHead(queueName string) error {
 
 	jobDir, _ := job.Env[jobDirEnvVar]
 
-	runErr := runScript(job.Name, job.Env, jobDir, job.Script, nil, stdoutFile, stderrFile)
+	runErr := runCommand(job.Name, job.Env, jobDir, job.Command, nil, stdoutFile, stderrFile)
 	cj.Error = ""
 	if runErr != nil {
 		cj.Error = runErr.Error()
 	}
-	if status, ok := interp.IsExitStatus(runErr); ok {
-		cj.ExitStatus = int(status)
+	var exitErr *exec.ExitError
+	if errors.As(runErr, &exitErr) {
+		cj.ExitStatus = exitErr.ExitCode()
 	}
 
 	logJobPrintf(job.Name, "Finished")
@@ -197,7 +196,7 @@ func (r jobRunner) runQueueHead(queueName string) error {
 	}
 
 	if runErr != nil {
-		return newJobError(job.Name, fmt.Errorf("script failed: %w", runErr))
+		return newJobError(job.Name, fmt.Errorf("command failed: %w", runErr))
 	}
 
 	return nil
@@ -246,26 +245,17 @@ func (r jobRunner) summarize() string {
 	return sb.String()
 }
 
-func runScript(jobName string, env envfile.Env, dir, script string, stdin io.Reader, stdout, stderr io.Writer) error {
-	parser := shsyntax.NewParser()
-
-	prog, err := parser.Parse(strings.NewReader(script), jobName)
-	if err != nil {
-		return fmt.Errorf("failed to parse shell script: %v", err)
+func runCommand(jobName string, env envfile.Env, dir string, cmd []string, stdin io.Reader, stdout, stderr io.Writer) error {
+	if len(cmd) == 0 {
+		return fmt.Errorf("empty command")
 	}
 
-	interpreter, err := interp.New(
-		interp.Dir(dir),
-		interp.Env(expand.ListEnviron(env.Strings()...)),
-		interp.StdIO(stdin, stdout, stderr),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create shell interpreter: %v", err)
-	}
+	c := exec.CommandContext(context.Background(), cmd[0], cmd[1:]...)
+	c.Dir = dir
+	c.Env = env.Strings()
+	c.Stdin = stdin
+	c.Stdout = stdout
+	c.Stderr = stderr
 
-	if err := interpreter.Run(context.Background(), prog); err != nil {
-		return err
-	}
-
-	return nil
+	return c.Run()
 }

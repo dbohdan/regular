@@ -1,14 +1,15 @@
 package main
 
 import (
+	"errors"
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
 	"dbohdan.com/regular/envfile"
-	"mvdan.cc/sh/v3/interp"
 )
 
 func TestJobRunner(t *testing.T) {
@@ -33,9 +34,9 @@ func TestJobRunner(t *testing.T) {
 	// Test adding a job.
 	t.Run("AddJob", func(t *testing.T) {
 		job := JobConfig{
-			Name:   "test-job",
-			Script: "echo 'hello'",
-			Env:    envfile.Env{},
+			Name:    "test-job",
+			Command: []string{"echo", "hello"},
+			Env:     envfile.Env{},
 		}
 		runner.addJob(job)
 
@@ -49,7 +50,7 @@ func TestJobRunner(t *testing.T) {
 		job := JobConfig{
 			Duplicate: true,
 			Name:      "duplicate-job",
-			Script:    "echo 'test'",
+			Command:   []string{"echo", "test"},
 			Env:       envfile.Env{},
 		}
 
@@ -65,10 +66,10 @@ func TestJobRunner(t *testing.T) {
 	// Test running a job.
 	t.Run("RunJob", func(t *testing.T) {
 		job := JobConfig{
-			Name:   "run-test-job",
-			Script: "echo 'Hello, world!'",
-			Env:    envfile.OS(),
-			Log:    true,
+			Name:    "run-test-job",
+			Command: []string{"echo", "Hello, world!"},
+			Env:     envfile.OS(),
+			Log:     true,
 		}
 		runner.addJob(job)
 
@@ -95,9 +96,9 @@ func TestJobRunner(t *testing.T) {
 	// Test a failed job.
 	t.Run("FailedJob", func(t *testing.T) {
 		job := JobConfig{
-			Name:   "fail-test-job",
-			Script: "exit 1",
-			Env:    envfile.Env{},
+			Name:    "fail-test-job",
+			Command: []string{"./regular"},
+			Env:     envfile.Env{},
 		}
 		runner.addJob(job)
 
@@ -115,8 +116,8 @@ func TestJobRunner(t *testing.T) {
 			t.Error("Expected completed job record, got nil")
 			return
 		}
-		if completed.ExitStatus != 1 {
-			t.Errorf("Expected exit status 1, got %d", completed.ExitStatus)
+		if completed.ExitStatus != 2 {
+			t.Errorf("Expected exit status 2, got %d", completed.ExitStatus)
 		}
 	})
 
@@ -130,41 +131,47 @@ func TestJobRunner(t *testing.T) {
 	})
 }
 
-func TestRunScript(t *testing.T) {
+func TestFuncRunCommand(t *testing.T) {
 	tests := []struct {
 		name       string
-		script     string
+		command    []string
 		wantErr    bool
 		exitStatus int
 	}{
 		{
-			name:       "successful script",
-			script:     "exit 0",
+			name:       "successful command",
+			command:    []string{"true"},
 			wantErr:    false,
 			exitStatus: 0,
 		},
 		{
-			name:       "failed script",
-			script:     "exit 1",
+			name:       "failed command",
+			command:    []string{"false"},
 			wantErr:    true,
 			exitStatus: 1,
 		},
 		{
-			name:       "invalid script",
-			script:     "invalid command",
+			name:       "nonexistent command",
+			command:    []string{"this-is-a-nonexistent-command"},
 			wantErr:    true,
-			exitStatus: 127,
+			exitStatus: 0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := runScript(tt.name, envfile.Env{}, "", tt.script, nil, nil, nil)
+			err := runCommand(tt.name, envfile.Env{}, "", tt.command, nil, nil, nil)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("runScript() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("runCommand() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if status, ok := interp.IsExitStatus(err); ok && int(status) != tt.exitStatus {
-				t.Errorf("runScript() exit status = %d, want %d", status, tt.exitStatus)
+
+			var exitErr *exec.ExitError
+			exitStatus := 0
+			if errors.As(err, &exitErr) {
+				exitStatus = exitErr.ExitCode()
+			}
+			if exitStatus != tt.exitStatus {
+				t.Errorf("runCommand() exit status = %d, want %d", exitStatus, tt.exitStatus)
 			}
 		})
 	}

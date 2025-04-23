@@ -10,7 +10,6 @@
 - Configuration using [Starlark](https://laurent.le-brun.eu/blog/an-overview-of-starlark), a small configuration language based on Python.
   You can use expressions like `hour in [9, 18] and minute == 0` to define when a job will run.
 - Flexible scheduling based on current time and the last completed job
-- The same shell on all platforms using [mvdan/sh](https://github.com/mvdan/sh)
 - Jitter to mitigate the [thundering herd problem](https://en.wikipedia.org/wiki/Thundering_herd_problem)
 - Job queues to configure what jobs run sequentially and in parallel
 - Built-in logging and status reporting
@@ -39,11 +38,12 @@ def should_run(finished, timestamp, dow, **_):
 # Random delay of up to 1 hour.
 jitter = one_hour
 
-# Shell script to run.
-script = """
-set -euo pipefail
-backup.sh ~/docs /backup/docs
-"""
+# Command to run.
+command = [
+    "sh",
+    "-c",
+    "backup.sh ~/docs /backup/docs",
+]
 
 # Queue name (the default is the name of the job directory).
 queue = "backup"
