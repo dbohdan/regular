@@ -22,7 +22,7 @@ func (r *RunCmd) Run(config Config) error {
 	now := time.Now()
 
 	for _, jobName := range r.JobNames {
-		path := filepath.Join(config.ConfigRoot, jobName, jobFileName)
+		path := filepath.Join(config.ConfigRoot, jobName, jobConfigFileName)
 
 		_, job, err := jobs.update(config.ConfigRoot, path)
 		if err != nil {

@@ -25,7 +25,7 @@ func (s *StatusCmd) Run(config Config) error {
 			return err
 		}
 
-		if !info.IsDir() && filepath.Base(path) == jobFileName {
+		if !info.IsDir() && filepath.Base(path) == jobConfigFileName {
 			_, _, err := jobs.update(config.ConfigRoot, path)
 			if err != nil {
 				return err

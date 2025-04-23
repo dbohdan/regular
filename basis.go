@@ -11,15 +11,16 @@ import (
 const (
 	version = "0.2.0"
 
-	appDBFileName     = "state.sqlite3"
-	appLogFileName    = "app.log"
-	appLockFileName   = "app.lock"
-	dirName           = "regular"
-	globalEnvFileName = "global.env"
-	jobEnvFileName    = "job.env"
-	jobFileName       = "job.star"
-	stderrFileName    = "stderr.log"
-	stdoutFileName    = "stdout.log"
+	appDBFileName         = "state.sqlite3"
+	appLockFileName       = "app.lock"
+	appLogFileName        = "app.log"
+	dirName               = "regular"
+	globalEnvFileName     = "global.env"
+	jobConfigFileName     = "config.star"
+	jobEnvFileName        = "job.env"
+	jobExecutableFileName = "./job"
+	stderrFileName        = "stderr.log"
+	stdoutFileName        = "stdout.log"
 
 	jobDirEnvVar = "REGULAR_JOB_DIR"
 

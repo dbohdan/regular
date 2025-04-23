@@ -22,7 +22,7 @@ func TestJobSchedulerUpdate(t *testing.T) {
 
 	configRoot := t.TempDir()
 	jobDir := filepath.Join(configRoot, "test-job")
-	jobPath := filepath.Join(jobDir, jobFileName)
+	jobPath := filepath.Join(jobDir, jobConfigFileName)
 
 	// Test updating a job with no job file.
 	result, _, err := jsc.update(configRoot, jobPath)
@@ -62,9 +62,9 @@ func TestJobNameFromPath(t *testing.T) {
 		path     string
 		expected string
 	}{
-		{"/path/to/jobdir/job.star", "jobdir"},
-		{"jobdir/job.star", "jobdir"},
-		{"job.star", "."},
+		{"/path/to/jobdir/config.star", "jobdir"},
+		{"jobdir/config.star", "jobdir"},
+		{"config.star", "."},
 	}
 
 	for _, tt := range tests {

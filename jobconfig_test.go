@@ -67,7 +67,7 @@ def should_run(**_):
     return True
 `
 
-	jobPath := filepath.Join(tmpDir, "job.star")
+	jobPath := filepath.Join(tmpDir, "config.star")
 	if err := os.WriteFile(jobPath, []byte(jobContent), 0644); err != nil {
 		t.Fatal(err)
 	}

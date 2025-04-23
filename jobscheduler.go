@@ -181,7 +181,7 @@ func (jsc jobScheduler) watchChanges(configRoot string, watcher *fsnotify.Watche
 				}
 			}
 
-			if filepath.Base(eventPath) == jobFileName {
+			if filepath.Base(eventPath) == jobConfigFileName {
 				jobName := jobNameFromPath(eventPath)
 
 				if event.Has(fsnotify.Write) {
@@ -202,7 +202,7 @@ func (jsc jobScheduler) watchChanges(configRoot string, watcher *fsnotify.Watche
 				if info, err := os.Stat(eventPath); err == nil && info.IsDir() {
 					_ = watcher.Add(eventPath)
 
-					jobFilePath := filepath.Join(eventPath, jobFileName)
+					jobFilePath := filepath.Join(eventPath, jobConfigFileName)
 					if _, err := os.Stat(jobFilePath); err == nil {
 						handleUpdate(jobFilePath)
 					}

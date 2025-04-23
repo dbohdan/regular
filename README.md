@@ -26,7 +26,7 @@ go install dbohdan.com/regular@latest
 
 ## Configuration
 
-Jobs are defined in Starlark files named `job.star` in subdirectories of the config directory.
+Jobs are defined in Starlark files named `config.star` in subdirectories of the config directory.
 For example:
 
 ```starlark
@@ -107,8 +107,9 @@ Default paths (override with **-c** and **-s**):
 
 - Config: `~/.config/regular/`
   - Global environment: `~/.config/regular/global.env`
-  - Job config: `~/.config/regular/<job>/job.star`
+  - Job config: `~/.config/regular/<job>/config.star`
   - Job environment: `~/.config/regular/<job>/job.env`
+  - Job executable (script): `~/.config/regular/<job>/job`
 
 - State: `~/.local/state/regular/`
   - App log: `~/.local/state/regular/app.log`

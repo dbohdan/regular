@@ -17,7 +17,7 @@ func (l *ListCmd) Run(config Config) error {
 			continue
 		}
 
-		jobFile := filepath.Join(config.ConfigRoot, entry.Name(), jobFileName)
+		jobFile := filepath.Join(config.ConfigRoot, entry.Name(), jobConfigFileName)
 		if _, err := os.Stat(jobFile); err == nil {
 			fmt.Println(entry.Name())
 		}

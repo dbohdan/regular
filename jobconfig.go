@@ -163,7 +163,7 @@ func loadJob(env envfile.Env, path string) (JobConfig, error) {
 	}
 
 	if len(job.Command) == 0 {
-		job.Command = []string{"./run"}
+		job.Command = []string{jobExecutableFileName}
 	}
 
 	enabledValue, exists := globals[enabledVar]
