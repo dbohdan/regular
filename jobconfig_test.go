@@ -122,3 +122,50 @@ def should_run(**_):
 		t.Errorf(`"should_run" returned %v, want "True"`, result)
 	}
 }
+
+func TestLoadJobWithNewEnv(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "jobconfig-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	jobContent := `
+env = {"BAR": "new-bar", "BAZ": "baz"}
+
+def should_run(**_):
+    return True
+`
+
+	jobPath := filepath.Join(tmpDir, "config.star")
+	if err := os.WriteFile(jobPath, []byte(jobContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Test loading the job with env override.
+	env := envfile.Env{"FOO": "foo", "BAR": "bar"}
+	job, err := loadJob(env, jobPath)
+	if err != nil {
+		t.Fatalf("loadJob() error = %v", err)
+	}
+
+	if _, ok := job.Env["FOO"]; ok {
+		t.Errorf("Env contains FOO when it shouldn't")
+	}
+
+	if v, ok := job.Env["BAR"]; !ok || v != "new-bar" {
+		t.Errorf(`Env["BAR"] = %q, want "new_value"`, v)
+	}
+
+	if v, ok := job.Env["BAZ"]; !ok || v != "baz" {
+		t.Errorf(`Env["BAZ"] = %q, want "baz"`, v)
+	}
+
+	if job.Name == "" {
+		t.Error("Job name is empty")
+	}
+
+	if job.ShouldRun == nil {
+		t.Error("should_run function is missing")
+	}
+}
