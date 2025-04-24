@@ -56,7 +56,7 @@ func TestLoadJob(t *testing.T) {
 	jobContent := `
 command = ["sleep", "1"]
 duplicate = False
-enabled = False
+enable = False
 env["TEST_VAR"] = "test_value"
 jitter = 5
 log = True
@@ -85,7 +85,7 @@ def should_run(**_):
 		got      interface{}
 		expected interface{}
 	}{
-		{"Enabled", job.Enabled, false},
+		{"Enable", job.Enable, false},
 		{"Command", job.Command, []string{"sleep", "1"}},
 		{"Duplicate", job.Duplicate, false},
 		{"Log", job.Log, true},

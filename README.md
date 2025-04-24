@@ -58,7 +58,7 @@ notify = "always"
 duplicate = False
 
 # Enable/disable the job (default).
-enabled = True
+enable = True
 ```
 
 Each job directory can also have an optional `job.env` file with environment variables:

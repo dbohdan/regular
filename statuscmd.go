@@ -86,7 +86,7 @@ func (s *StatusCmd) Run(config Config) error {
 		color.Unset()
 
 		fmt.Println("    duplicate:", boolYesNo(job.Duplicate))
-		fmt.Println("    enabled:", boolYesNo(job.Enabled))
+		fmt.Println("    enable:", boolYesNo(job.Enable))
 
 		if len(job.Env) == 0 {
 			fmt.Println("    env: none")

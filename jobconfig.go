@@ -15,7 +15,7 @@ import (
 type JobConfig struct {
 	Command   []string       `starlark:"command"`
 	Duplicate bool           `starlark:"duplicate"`
-	Enabled   bool           `starlark:"enabled"`
+	Enable    bool           `starlark:"enable"`
 	Env       envfile.Env    `starlark:"-"`
 	Jitter    time.Duration  `starlark:"jitter"`
 	Log       bool           `starlark:"log"`
@@ -34,7 +34,7 @@ func (j JobConfig) QueueName() string {
 }
 
 func (j JobConfig) shouldRun(t time.Time, lastCompleted *CompletedJob) (bool, error) {
-	if !j.Enabled {
+	if !j.Enable {
 		return false, nil
 	}
 
@@ -166,8 +166,8 @@ func loadJob(env envfile.Env, path string) (JobConfig, error) {
 		job.Command = []string{jobExecutableFileName}
 	}
 
-	enabledValue, exists := globals[enabledVar]
-	job.Enabled = !exists || enabledValue == starlark.True
+	enableValue, exists := globals[enableVar]
+	job.Enable = !exists || enableValue == starlark.True
 
 	logValue, exists := globals[logVar]
 	job.Log = !exists || logValue == starlark.True

@@ -24,7 +24,7 @@ const (
 
 	jobDirEnvVar = "REGULAR_JOB_DIR"
 
-	enabledVar    = "enabled"
+	enableVar     = "enable"
 	envVar        = "env"
 	logVar        = "log"
 	notifyModeVar = "notify"
