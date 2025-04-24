@@ -157,7 +157,7 @@ func (r jobRunner) runQueueHead(queueName string) error {
 		}
 	}
 
-	jobDir, _ := job.Env[jobDirEnvVar]
+	jobDir := job.Env[jobDirEnvVar]
 
 	runErr := runCommand(job.Name, job.Env, jobDir, job.Command, nil, stdoutFile, stderrFile)
 	cj.Error = ""
