@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -56,6 +58,29 @@ func (jsc jobScheduler) exists(name string) bool {
 	jsc.mu.Unlock()
 
 	return exists
+}
+
+func (jsc jobScheduler) loadAll(configRoot string) ([]string, error) {
+	loadedJobs := []string{}
+	err := filepath.Walk(configRoot, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if !info.IsDir() && filepath.Base(path) == jobConfigFileName {
+			jobName := jobNameFromPath(path)
+			_, _, err := jsc.update(configRoot, path)
+			if err == nil {
+				loadedJobs = append(loadedJobs, jobName)
+			} else {
+				logJobPrintf(jobName, "Error at startup: %v", err)
+			}
+		}
+
+		return nil
+	})
+
+	return loadedJobs, err
 }
 
 func (jsc jobScheduler) schedule(runner jobRunner) error {
@@ -151,6 +176,13 @@ func (jsc jobScheduler) remove(name string) error {
 	return nil
 }
 
+func (jsc *jobScheduler) removeAll() {
+	jsc.mu.Lock()
+	defer jsc.mu.Unlock()
+
+	jsc.byName = make(map[string]JobConfig)
+}
+
 func (jsc jobScheduler) watchChanges(configRoot string, eventChan <-chan notify.EventInfo) error {
 	debounced := debounce.New(debounceInterval)
 
@@ -196,9 +228,19 @@ func (jsc jobScheduler) watchChanges(configRoot string, eventChan <-chan notify.
 			}
 		}
 
-		if basename == jobConfigFileName {
-			// Debounce updates to handle rapid saves.
+		if basename == globalEnvFileName {
+			debounced(func() {
+				jsc.removeAll()
+				loadedJobs, err := jsc.loadAll(configRoot)
+				if err == nil {
+					log.Printf("Reloaded jobs because global env file changed: %s", strings.Join(loadedJobs, ", "))
+				} else {
+					log.Printf("Failed to reload jobs because global env file changed: %v", err)
+				}
+			})
+		} else if basename == jobConfigFileName {
 			if _, err := os.Stat(eventPath); err == nil {
+				// Debounce updates to handle rapid saves.
 				debounced(handleUpdate)
 			} else if os.IsNotExist(err) {
 				// If the file doesn't exist by the time debounce runs, treat as removal

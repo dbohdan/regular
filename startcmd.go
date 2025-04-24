@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -36,7 +35,7 @@ func runService(config Config) error {
 		_ = fileLock.Unlock()
 	}()
 
-	jobs := newJobScheduler()
+	jsc := newJobScheduler()
 
 	eventChan := make(chan notify.EventInfo, 1)
 
@@ -47,24 +46,7 @@ func runService(config Config) error {
 	}
 	defer notify.Stop(eventChan)
 
-	loadedJobs := []string{}
-	err = filepath.Walk(config.ConfigRoot, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if !info.IsDir() && filepath.Base(path) == jobConfigFileName {
-			jobName := jobNameFromPath(path)
-			_, _, err := jobs.update(config.ConfigRoot, path)
-			if err == nil {
-				loadedJobs = append(loadedJobs, jobName)
-			} else {
-				logJobPrintf(jobName, "Error at startup: %v", err)
-			}
-		}
-
-		return nil
-	})
+	loadedJobs, err := jsc.loadAll(config.ConfigRoot)
 	if err != nil {
 		return fmt.Errorf("error looking for jobs in config dir: %w", err)
 	}
@@ -78,10 +60,10 @@ func runService(config Config) error {
 	runner, _ := newJobRunner(db, notifyUserByEmail, config.StateRoot)
 
 	go withLog(func() error {
-		return jobs.schedule(runner)
+		return jsc.schedule(runner)
 	})
 	go withLog(func() error {
-		return jobs.watchChanges(config.ConfigRoot, eventChan)
+		return jsc.watchChanges(config.ConfigRoot, eventChan)
 	})
 	go runner.run()
 
