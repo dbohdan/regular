@@ -1,7 +1,7 @@
 package main
 
 import (
-	"crypto/sha512"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	checksumFilename = "SHA512SUMS.txt"
+	checksumFilename = "SHA256SUMS.txt"
 	projectName      = "regular"
 	distDir          = "dist"
 )
@@ -101,7 +101,7 @@ func generateChecksum(filePath, version string) error {
 	}
 	defer f.Close()
 
-	h := sha512.New()
+	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
 		return fmt.Errorf("Failed to calculate hash: %v", err)
 	}
