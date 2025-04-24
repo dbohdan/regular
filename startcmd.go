@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/gofrs/flock"
+	"github.com/syncthing/notify"
 )
 
 func (r *StartCmd) Run(config Config) error {
@@ -38,11 +38,14 @@ func runService(config Config) error {
 
 	jobs := newJobScheduler()
 
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
+	eventChan := make(chan notify.EventInfo, 1)
+
+	// "..." indicates recursive watching.
+	watchPath := filepath.Join(config.ConfigRoot, "...")
+	if err := notify.Watch(watchPath, eventChan, notify.Create, notify.Rename, notify.Remove, notify.Write); err != nil {
 		return fmt.Errorf("failed to create watcher: %w", err)
 	}
-	defer watcher.Close()
+	defer notify.Stop(eventChan)
 
 	loadedJobs := []string{}
 	err = filepath.Walk(config.ConfigRoot, func(path string, info os.FileInfo, err error) error {
@@ -50,11 +53,7 @@ func runService(config Config) error {
 			return err
 		}
 
-		if info.IsDir() {
-			return watcher.Add(path)
-		}
-
-		if filepath.Base(path) == jobConfigFileName {
+		if !info.IsDir() && filepath.Base(path) == jobConfigFileName {
 			jobName := jobNameFromPath(path)
 			_, _, err := jobs.update(config.ConfigRoot, path)
 			if err == nil {
@@ -82,7 +81,7 @@ func runService(config Config) error {
 		return jobs.schedule(runner)
 	})
 	go withLog(func() error {
-		return jobs.watchChanges(config.ConfigRoot, watcher)
+		return jobs.watchChanges(config.ConfigRoot, eventChan)
 	})
 	go runner.run()
 

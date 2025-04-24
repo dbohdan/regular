@@ -3,12 +3,13 @@ package main
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/bep/debounce"
-	"github.com/fsnotify/fsnotify"
+	"github.com/syncthing/notify"
 
 	"dbohdan.com/regular/envfile"
 )
@@ -47,6 +48,14 @@ func (jsc jobScheduler) addDueJobsToQueue(runner jobRunner, t time.Time) error {
 	}
 
 	return nil
+}
+
+func (jsc jobScheduler) exists(name string) bool {
+	jsc.mu.Lock()
+	_, exists := jsc.byName[name]
+	jsc.mu.Unlock()
+
+	return exists
 }
 
 func (jsc jobScheduler) schedule(runner jobRunner) error {
@@ -103,11 +112,11 @@ func (jsc jobScheduler) update(configRoot, jobPath string) (updateJobsResult, *J
 		{name: "job", path: jobEnvPath},
 	} {
 		newEnv, err := envfile.Load(envItem.path, true, env)
-		if err != nil {
+		if err == nil {
+			env = envfile.Merge(env, newEnv)
+		} else if !os.IsNotExist(err) {
 			return jobsNoChanges, nil, fmt.Errorf("failed to load %s env file: %v", envItem.name, err)
 		}
-
-		env = envfile.Merge(env, newEnv)
 	}
 
 	env[jobDirEnvVar] = jobDir
@@ -142,79 +151,78 @@ func (jsc jobScheduler) remove(name string) error {
 	return nil
 }
 
-func (jsc jobScheduler) watchChanges(configRoot string, watcher *fsnotify.Watcher) error {
+func (jsc jobScheduler) watchChanges(configRoot string, eventChan <-chan notify.EventInfo) error {
 	debounced := debounce.New(debounceInterval)
 
-	for {
-		select {
+	for eventInfo := range eventChan {
+		event := eventInfo.Event()
+		eventPath := eventInfo.Path()
 
-		case event, ok := <-watcher.Events:
-			if !ok {
-				return nil
-			}
+		basename := filepath.Base(eventPath)
+		jobName := jobNameFromPath(eventPath)
+		jobConfigPath := path.Join(configRoot, jobName, jobConfigFileName)
 
-			eventPath := event.Name
-
-			handleUpdate := func(updatePath string) {
-				jobName := jobNameFromPath(updatePath)
-
-				res, _, err := jsc.update(configRoot, updatePath)
-				if err != nil {
-					removeErr := jsc.remove(jobName)
-
-					if removeErr == nil {
-						logJobPrintf(jobName, "Job removed after update error: %v", err)
+		handleUpdate := func() {
+			res, _, err := jsc.update(configRoot, jobConfigPath)
+			if err != nil {
+				// If the file doesn't exist or there is another error, remove the job.
+				removeErr := jsc.remove(jobName)
+				if removeErr == nil {
+					if os.IsNotExist(err) {
+						logJobPrintf(jobName, "Removed job because config file is gone")
 					} else {
-						logJobPrintf(jobName, "Failed to remove job after update error: %v", err)
+						logJobPrintf(jobName, "Removed job after update error: %v", err)
 					}
+				} else {
+					// Log both errors if removal fails.
+					logJobPrintf(jobName, "Failed to remove job: %v (original error: %v)", removeErr, err)
 				}
 
-				switch res {
+				// Do not proceed after handling an error or job removal.
+				return
+			}
 
-				case jobsNoChanges:
+			switch res {
 
-				case jobsUpdated:
-					logJobPrintf(jobName, "Updated job")
+			case jobsNoChanges:
+				// This case might not happen often with file events, but log just in case.
+				logJobPrintf(jobName, "Job checked; no effective changes detected")
 
-				case jobsAddedNew:
-					logJobPrintf(jobName, "Added job")
+			case jobsUpdated:
+				logJobPrintf(jobName, "Updated job")
+
+			case jobsAddedNew:
+				logJobPrintf(jobName, "Added job")
+			}
+		}
+
+		if basename == jobConfigFileName {
+			// Debounce updates to handle rapid saves.
+			if _, err := os.Stat(eventPath); err == nil {
+				debounced(handleUpdate)
+			} else if os.IsNotExist(err) {
+				// If the file doesn't exist by the time debounce runs, treat as removal
+				errRemove := jsc.remove(jobName)
+				if errRemove == nil {
+					logJobPrintf(jobName, "Removed job because config file is gone")
+				} else {
+					logJobPrintf(jobName, "Failed to remove job with config file gone: %v", errRemove)
+				}
+			} else {
+				logJobPrintf(jobName, "Error calling os.Stat on file %q before update: %v", eventPath, err)
+			}
+		} else if basename == jobEnvFileName && jsc.exists(jobName) {
+			debounced(handleUpdate)
+		} else if event == notify.Create {
+			// Handle creation of other files or dirs.
+			// If a directory is created, check if it contains a job config file.
+			if info, err := os.Stat(eventPath); err == nil && info.IsDir() {
+				if _, err := os.Stat(jobConfigPath); err == nil {
+					debounced(handleUpdate)
 				}
 			}
-
-			if filepath.Base(eventPath) == jobConfigFileName {
-				jobName := jobNameFromPath(eventPath)
-
-				if event.Has(fsnotify.Write) {
-					debounced(func() {
-						handleUpdate(eventPath)
-					})
-				} else if event.Has(fsnotify.Remove) {
-					err := jsc.remove(jobName)
-					if err == nil {
-						logJobPrintf(jobName, "Removed job")
-					} else {
-						logJobPrintf(jobName, "Failed to remove job: %v", err)
-					}
-				}
-			}
-
-			if event.Has(fsnotify.Create) {
-				if info, err := os.Stat(eventPath); err == nil && info.IsDir() {
-					_ = watcher.Add(eventPath)
-
-					jobFilePath := filepath.Join(eventPath, jobConfigFileName)
-					if _, err := os.Stat(jobFilePath); err == nil {
-						handleUpdate(jobFilePath)
-					}
-				}
-			}
-
-		case err, ok := <-watcher.Errors:
-			if !ok {
-				return nil
-			}
-
-			return fmt.Errorf("watcher error: %w", err)
 		}
 	}
+
+	return nil
 }

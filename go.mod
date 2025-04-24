@@ -8,11 +8,11 @@ require (
 	github.com/alecthomas/repr v0.4.0
 	github.com/bep/debounce v1.2.1
 	github.com/fatih/color v1.18.0
-	github.com/fsnotify/fsnotify v1.8.0
 	github.com/gofrs/flock v0.12.1
 	github.com/google/go-cmp v0.6.0
 	github.com/mna/starstruct v0.0.0-20230205201804-e87b5f6cbd2d
 	github.com/nxadm/tail v1.4.11
+	github.com/syncthing/notify v0.0.0-20250207082249-f0fa8f99c2bc
 	github.com/xhit/go-simple-mail/v2 v2.16.0
 	go.starlark.net v0.0.0-20241226192728-8dfa5b98479f
 	golang.org/x/term v0.27.0
@@ -21,6 +21,7 @@ require (
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/go-test/deep v1.1.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
