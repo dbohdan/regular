@@ -18,7 +18,7 @@ const (
 	globalEnvFileName     = "global.env"
 	jobConfigFileName     = "config.star"
 	jobEnvFileName        = "job.env"
-	jobExecutableFileName = "./job"
+	jobExecutableFileName = "./run"
 	stderrFileName        = "stderr.log"
 	stdoutFileName        = "stdout.log"
 
