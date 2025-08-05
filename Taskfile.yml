@@ -19,9 +19,9 @@ tasks:
   build:
     desc: 'Build all components'
     deps:
-      - build_regular
+      - build-regular
 
-  build_regular:
+  build-regular:
     desc: 'Build the Regular binary'
     cmds:
       - cmd: go build -trimpath
@@ -38,13 +38,13 @@ tasks:
   release:
     desc: 'Prepare a release'
     deps:
-      - build_regular
+      - build-regular
     cmds:
       - VERSION=$(./regular{{.ext}} --version) go run script/release.go
 
   test:
     desc: 'Run tests'
     deps:
-      - build_regular
+      - build-regular
     cmds:
       - go test ./...
