@@ -3,6 +3,7 @@ module dbohdan.com/regular
 go 1.22
 
 require (
+	dbohdan.com/denv v0.1.0
 	github.com/adrg/xdg v0.5.3
 	github.com/alecthomas/kong v1.6.0
 	github.com/alecthomas/repr v0.4.0
@@ -20,7 +21,6 @@ require (
 )
 
 require (
-	dbohdan.com/denv v0.0.0-20251025213607-a60d46b9b4f9 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/go-test/deep v1.1.1 // indirect
