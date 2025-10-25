@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"dbohdan.com/regular/envfile"
+	"dbohdan.com/denv"
 	"github.com/google/go-cmp/cmp"
 	"go.starlark.net/starlark"
 )
@@ -73,7 +73,7 @@ def should_run(**_):
 	}
 
 	// Test loading the job.
-	env := envfile.Env{"INITIAL_VAR": "initial_value"}
+	env := denv.Env{"INITIAL_VAR": "initial_value"}
 	job, err := loadJob(env, jobPath)
 	if err != nil {
 		t.Fatalf("loadJob() error = %v", err)
@@ -143,7 +143,7 @@ def should_run(**_):
 	}
 
 	// Test loading the job with env override.
-	env := envfile.Env{"FOO": "foo", "BAR": "bar"}
+	env := denv.Env{"FOO": "foo", "BAR": "bar"}
 	job, err := loadJob(env, jobPath)
 	if err != nil {
 		t.Fatalf("loadJob() error = %v", err)

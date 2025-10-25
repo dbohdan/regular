@@ -8,7 +8,7 @@ import (
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
 
-	"dbohdan.com/regular/envfile"
+	"dbohdan.com/denv"
 	"dbohdan.com/regular/starlarkutil"
 )
 
@@ -16,7 +16,7 @@ type JobConfig struct {
 	Command   []string       `starlark:"command"`
 	Duplicate bool           `starlark:"duplicate"`
 	Enable    bool           `starlark:"enable"`
-	Env       envfile.Env    `starlark:"-"`
+	Env       denv.Env       `starlark:"-"`
 	Jitter    time.Duration  `starlark:"jitter"`
 	Log       bool           `starlark:"log"`
 	Name      string         `starlark:"-"`
@@ -123,7 +123,7 @@ func (j JobConfig) addToQueueIfDue(runner jobRunner, t time.Time) error {
 	return nil
 }
 
-func loadJob(env envfile.Env, path string) (JobConfig, error) {
+func loadJob(env denv.Env, path string) (JobConfig, error) {
 	thread := &starlark.Thread{Name: "job"}
 
 	job := JobConfig{
@@ -182,7 +182,7 @@ func loadJob(env envfile.Env, path string) (JobConfig, error) {
 		}
 	}
 
-	job.Env = make(envfile.Env)
+	job.Env = make(denv.Env)
 	for _, item := range finalEnvDict.Items() {
 		key, ok := item.Index(0).(starlark.String)
 		if !ok {

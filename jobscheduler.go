@@ -13,7 +13,7 @@ import (
 	"github.com/bep/debounce"
 	"github.com/syncthing/notify"
 
-	"dbohdan.com/regular/envfile"
+	"dbohdan.com/denv"
 )
 
 type jobScheduler struct {
@@ -125,7 +125,7 @@ func (jsc jobScheduler) update(configRoot, jobPath string) (updateJobsResult, *J
 	jobDir := jobDir(jobPath)
 	jobName := jobNameFromPath(jobPath)
 
-	env := envfile.OS()
+	env := denv.OS()
 	globalEnvPath := filepath.Join(configRoot, globalEnvFileName)
 	jobEnvPath := filepath.Join(jobDir, jobEnvFileName)
 
@@ -136,9 +136,9 @@ func (jsc jobScheduler) update(configRoot, jobPath string) (updateJobsResult, *J
 		{name: "global", path: globalEnvPath},
 		{name: "job", path: jobEnvPath},
 	} {
-		newEnv, err := envfile.Load(envItem.path, true, env)
+		newEnv, err := denv.Load(envItem.path, true, env)
 		if err == nil {
-			env = envfile.Merge(env, newEnv)
+			env = denv.Merge(env, newEnv)
 		} else if !os.IsNotExist(err) {
 			return jobsNoChanges, nil, fmt.Errorf("failed to load %s env file: %v", envItem.name, err)
 		}

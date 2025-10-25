@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"dbohdan.com/regular/envfile"
+	"dbohdan.com/denv"
 )
 
 type jobRunner struct {
@@ -245,7 +245,7 @@ func (r jobRunner) summarize() string {
 	return sb.String()
 }
 
-func runCommand(jobName string, env envfile.Env, dir string, cmd []string, stdin io.Reader, stdout, stderr io.Writer) error {
+func runCommand(jobName string, env denv.Env, dir string, cmd []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	if len(cmd) == 0 {
 		return fmt.Errorf("empty command")
 	}

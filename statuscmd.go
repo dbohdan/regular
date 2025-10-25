@@ -11,7 +11,7 @@ import (
 	"github.com/fatih/color"
 	"golang.org/x/term"
 
-	"dbohdan.com/regular/envfile"
+	"dbohdan.com/denv"
 )
 
 func (s *StatusCmd) Run(config Config) error {
@@ -70,7 +70,7 @@ func (s *StatusCmd) Run(config Config) error {
 		}
 		seenNames[name] = struct{}{}
 
-		for key, value := range envfile.OS() {
+		for key, value := range denv.OS() {
 			if osValue, ok := job.Env[key]; ok && value == osValue {
 				delete(job.Env, key)
 				continue

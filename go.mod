@@ -20,6 +20,7 @@ require (
 )
 
 require (
+	dbohdan.com/denv v0.0.0-20251025213607-a60d46b9b4f9 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/go-test/deep v1.1.1 // indirect

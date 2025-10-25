@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"dbohdan.com/regular/envfile"
+	"dbohdan.com/denv"
 )
 
 func TestJobRunner(t *testing.T) {
@@ -36,7 +36,7 @@ func TestJobRunner(t *testing.T) {
 		job := JobConfig{
 			Name:    "test-job",
 			Command: []string{"echo", "hello"},
-			Env:     envfile.Env{},
+			Env:     denv.Env{},
 		}
 		runner.addJob(job)
 
@@ -51,7 +51,7 @@ func TestJobRunner(t *testing.T) {
 			Duplicate: true,
 			Name:      "duplicate-job",
 			Command:   []string{"echo", "test"},
-			Env:       envfile.Env{},
+			Env:       denv.Env{},
 		}
 
 		runner.addJob(job)
@@ -68,7 +68,7 @@ func TestJobRunner(t *testing.T) {
 		job := JobConfig{
 			Name:    "run-test-job",
 			Command: []string{"echo", "Hello, world!"},
-			Env:     envfile.OS(),
+			Env:     denv.OS(),
 			Log:     true,
 		}
 		runner.addJob(job)
@@ -98,7 +98,7 @@ func TestJobRunner(t *testing.T) {
 		job := JobConfig{
 			Name:    "fail-test-job",
 			Command: []string{"./regular"},
-			Env:     envfile.Env{},
+			Env:     denv.Env{},
 		}
 		runner.addJob(job)
 
@@ -160,7 +160,7 @@ func TestFuncRunCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := runCommand(tt.name, envfile.Env{}, "", tt.command, nil, nil, nil)
+			err := runCommand(tt.name, denv.Env{}, "", tt.command, nil, nil, nil)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("runCommand() error = %v, wantErr %v", err, tt.wantErr)
 			}

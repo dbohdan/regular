@@ -1,3 +1,5 @@
+dbohdan.com/denv v0.0.0-20251025213607-a60d46b9b4f9 h1:9x1B8K/Vdhr1EIkHLqBXNzOmdD0IGz6GcmUv+wK5YHA=
+dbohdan.com/denv v0.0.0-20251025213607-a60d46b9b4f9/go.mod h1:bhOtTgfQ+aa025odFcv4GBhe7pSVq8QHEYa3YXCbURY=
 github.com/adrg/xdg v0.5.3 h1:xRnxJXne7+oWDatRhR1JLnvuccuIeCoBu2rtuLqQB78=
 github.com/adrg/xdg v0.5.3/go.mod h1:nlTsY+NNiCBGCK2tpm09vRqfVzrc2fLmXGpBLF0zlTQ=
 github.com/alecthomas/assert/v2 v2.11.0 h1:2Q9r3ki8+JYXvGsDyBXwH3LcJ+WK5D0gc5E8vS6K3D0=
