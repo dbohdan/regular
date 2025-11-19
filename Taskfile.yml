@@ -1,8 +1,5 @@
 version: '3'
 
-vars:
-  ext: '{{if eq OS "windows"}}.exe{{end}}'
-
 env:
   CGO_ENABLED: 0
 
@@ -40,7 +37,7 @@ tasks:
     deps:
       - build-regular
     cmds:
-      - VERSION=$(./regular{{.ext}} --version) go run script/release.go
+      - VERSION=$(./regular{{exeExt}} --version) go run script/release.go
 
   test:
     desc: 'Run tests'
