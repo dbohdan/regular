@@ -1,6 +1,7 @@
 # Regular
 
-> 🚧 **This project is in early development.**
+> [!WARNING]
+> **This project is in early development.**\
 > It is not ready for others to use.
 
 **Regular** is a job scheduler like [cron](https://en.wikipedia.org/wiki/Cron) and [anacron](https://en.wikipedia.org/wiki/Anacron).
@@ -73,11 +74,10 @@ BACKUP_OPTS=--compress
 ### General
 
 - **regular** [_flags_] _command_
-    - **-h**, **--help** Print help
-    - **-V**, **--version** Print version number and exit
-    - **-c**, **--config-dir** Path to config directory
-    - **-s**, **--state-dir** Path to state directory
-docs(*): remove '`' from comments
+  - **-h**, **--help** Print help
+  - **-V**, **--version** Print version number and exit
+  - **-c**, **--config-dir** Path to config directory
+  - **-s**, **--state-dir** Path to state directory
 
 ### Commands
 
@@ -126,6 +126,51 @@ There is currently no built-in way to remove old logs from the database.
 You can use the [**sqlite3** command shell](https://www.sqlite.org/cli.html) to remove logs manually.
 
 All files and directories are created with 0600 and 0700 permissions respectively.
+
+## systemd service
+
+Regular's repository includes a systemd user-service template for running the scheduler automatically.
+
+To install and enable the service, clone the repository, then run:
+
+```shell
+cd systemd/
+# Run this as your user, not as root.
+./install.sh
+```
+
+This will:
+
+- Create a service file in `~/.config/systemd/user/`
+- Enable the service to start automatically
+- Start the service immediately
+
+To check the service status:
+
+```shell
+systemctl --user status regular
+```
+
+To view logs:
+
+```shell
+journalctl --user -u regular -f
+```
+
+## Shell completions
+
+Regular includes shell completions for the fish shell.
+
+### fish shell
+
+To install completion for the [fish shell](https://en.wikipedia.org/wiki/Fish_(Unix_shell)), clone the repository, then run:
+
+```shell
+cd completions/
+./install.fish
+```
+
+This will copy the completion file to your fish configuration directory.
 
 ## License
 
