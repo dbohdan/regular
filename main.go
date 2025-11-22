@@ -57,7 +57,7 @@ func (v VersionFlag) IsBool() bool {
 
 func (v VersionFlag) BeforeApply(app *kong.Kong, vars kong.Vars) error {
 	fmt.Println(version)
-	app.Exit(0)
+	app.Exit(exitOK)
 
 	return nil
 }
@@ -123,8 +123,8 @@ func main() {
 			Compact: true,
 		}),
 		kong.Exit(func(code int) {
-			if code == 1 {
-				code = 2
+			if code == exitError {
+				code = exitBadUsage
 			}
 
 			os.Exit(code)
@@ -152,7 +152,7 @@ func main() {
 		logFile, err := os.OpenFile(cli.Output, os.O_APPEND|os.O_CREATE|os.O_WRONLY, filePerms)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to open app log file: %v\n", err)
-			os.Exit(1)
+			os.Exit(exitError)
 		}
 		defer logFile.Close()
 
@@ -162,7 +162,7 @@ func main() {
 	db, err := openAppDB(cli.StateRoot)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to open app database: %v\n", err)
-		os.Exit(1)
+		os.Exit(exitError)
 	}
 	defer db.close()
 

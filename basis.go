@@ -36,6 +36,10 @@ const (
 	redactedValue = "[redacted]"
 	secretRegexp  = "(?i)(key|password|secret|token)"
 
+	exitOK       = 0
+	exitError    = 1
+	exitBadUsage = 2
+
 	dirPerms  = 0700
 	filePerms = 0600
 
