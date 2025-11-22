@@ -119,6 +119,8 @@ Default paths (override with **-c** and **-s**):
   - Logs for the latest job: `~/.local/state/regular/<job>/{stdout,stderr}.log`.
     These logs and earlier logs are also stored in the database.
 
+The config and state directory are created automatically when you run `regular start` or `regular run`.
+
 Job logs are truncated at 256 KiB.
 There is currently no built-in way to remove old logs from the database.
 You can use the [**sqlite3** command shell](https://www.sqlite.org/cli.html) to remove logs manually.

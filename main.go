@@ -137,6 +137,17 @@ func main() {
 		},
 	)
 
+	config := Config{
+		ConfigRoot: cli.ConfigRoot,
+		StateRoot:  cli.StateRoot,
+	}
+
+	command := ctx.Command()
+	if command == "run" || command == "start" {
+		fmt.Fprintf(os.Stderr, "COMMAND\n")
+		createDirectories(config)
+	}
+
 	if cli.Output != "-" {
 		logFile, err := os.OpenFile(cli.Output, os.O_APPEND|os.O_CREATE|os.O_WRONLY, filePerms)
 		if err != nil {
@@ -146,11 +157,6 @@ func main() {
 		defer logFile.Close()
 
 		log.SetOutput(&logWriter{tee: logFile})
-	}
-
-	config := Config{
-		ConfigRoot: cli.ConfigRoot,
-		StateRoot:  cli.StateRoot,
 	}
 
 	db, err := openAppDB(cli.StateRoot)
