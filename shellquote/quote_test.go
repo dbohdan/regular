@@ -19,6 +19,11 @@ func TestQuote(t *testing.T) {
 		{"it's", "posix", `'it'"'"'s'`, false},
 		{"complex'quote", "posix", `'complex'"'"'quote'`, false},
 
+		{"hello", "powershell", "hello", false},
+		{"hello world", "powershell", "'hello world'", false},
+		{"it's", "powershell", "'it''s'", false},
+		{"complex'quote", "powershell", "'complex''quote'", false},
+
 		{"hello", "invalid", "", true},
 	}
 

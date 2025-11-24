@@ -1,3 +1,4 @@
+// Package shellquote provides functions for quoting strings for different shell interpreters.
 package shellquote
 
 import (
@@ -6,21 +7,25 @@ import (
 	"strings"
 )
 
-// Returns a version of the string quoted for the given shell interpreter.
+// Quote returns a version of the string quoted for the given shell interpreter.
+// The value of shell must be "fish", "posix", or "powershell" (case-insensitive).
 func Quote(s string, shell string) (string, error) {
-	switch shell {
-
+	switch strings.ToLower(shell) {
 	case "fish":
 		return Fish(s), nil
 
 	case "posix":
-		return Posix(s), nil
+		return POSIX(s), nil
+
+	case "powershell":
+		return PowerShell(s), nil
 
 	default:
 		return "", fmt.Errorf("unsupported shell: %s", shell)
 	}
 }
 
+// Fish returns a version of the string quoted for the Fish shell.
 func Fish(s string) string {
 	if shellSafe(s) {
 		return s
@@ -29,7 +34,8 @@ func Fish(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `\'`) + "'"
 }
 
-func Posix(s string) string {
+// POSIX returns a version of the string quoted for POSIX-compliant shells.
+func POSIX(s string) string {
 	if shellSafe(s) {
 		return s
 	}
@@ -38,6 +44,17 @@ func Posix(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
 }
 
+// PowerShell returns a version of the string quoted for PowerShell.
+func PowerShell(s string) string {
+	if shellSafe(s) {
+		return s
+	}
+
+	// In PowerShell, single quotes are escaped by doubling them.
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+}
+
+// shellSafe reports whether the string can be used safely in shell commands without quoting.
 func shellSafe(s string) bool {
 	re := regexp.MustCompile("^[A-Za-z0-9%+,-./:=@_]+$")
 	return re.MatchString(s)
