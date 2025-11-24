@@ -129,7 +129,8 @@ All files and directories are created with 0600 and 0700 permissions respectivel
 
 ## systemd service
 
-Regular's repository includes a systemd user-service template for running the scheduler automatically.
+Regular's repository includes a systemd unit file for running the scheduler automatically as your user.
+Installation requires replacing `%USER%` with your username.
 
 To install and enable the service, clone the repository, then run:
 
@@ -163,7 +164,7 @@ Regular includes shell completions for the fish shell.
 
 ### fish shell
 
-To install completion for the [fish shell](https://en.wikipedia.org/wiki/Fish_(Unix_shell)), clone the repository, then run:
+To install completions for the [fish shell](https://en.wikipedia.org/wiki/Fish_(Unix_shell)), clone the repository, then run:
 
 ```shell
 cd completions/
