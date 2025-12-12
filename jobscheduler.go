@@ -53,9 +53,9 @@ func (jsc jobScheduler) addDueJobsToQueue(runner jobRunner, t time.Time) error {
 }
 
 func (jsc jobScheduler) exists(name string) bool {
-	jsc.mu.Lock()
+	jsc.mu.RLock()
 	_, exists := jsc.byName[name]
-	jsc.mu.Unlock()
+	jsc.mu.RUnlock()
 
 	return exists
 }

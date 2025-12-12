@@ -179,13 +179,13 @@ func (r jobRunner) runQueueHead(queueName string) error {
 		queue.jobs = queue.jobs[1:]
 		r.queues[queueName] = queue
 	}
+	r.mu.Unlock()
 
 	saveErr := r.db.saveCompletedJob(job.Name, cj, []logFile{
 		{name: "stdout", path: stdoutFilePath},
 		{name: "stderr", path: stderrFilePath},
 	})
 	notifyErr := notifyIfNeeded(r.notify, job.Notify, job.Name, cj)
-	r.mu.Unlock()
 
 	if notifyErr != nil {
 		return newJobError(job.Name, fmt.Errorf("failed to notify about completed job: %w", notifyErr))
@@ -226,6 +226,9 @@ func (r jobRunner) run() {
 // This function doesn't lock the runner or the queues.
 // It is left to the caller.
 func (r jobRunner) summarize() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	var sb strings.Builder
 
 	for queueName, queue := range r.queues {
