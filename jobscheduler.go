@@ -181,8 +181,26 @@ func (jsc *jobScheduler) removeAll() {
 	jsc.byName = make(map[string]JobConfig)
 }
 
+// globalEnvDebounceKey is the per-job-debouncer key reserved for global.env
+// reloads. Job names cannot contain a path separator, so this can never
+// collide with a real job name.
+const globalEnvDebounceKey = "/global.env"
+
 func (jsc *jobScheduler) watchChanges(configRoot string, eventChan <-chan notify.EventInfo) error {
-	debounced := debounce.New(debounceInterval)
+	var debouncerMu sync.Mutex
+	debouncers := map[string]func(func()){}
+	debouncerFor := func(key string) func(func()) {
+		debouncerMu.Lock()
+		defer debouncerMu.Unlock()
+
+		d, ok := debouncers[key]
+		if !ok {
+			d = debounce.New(debounceInterval)
+			debouncers[key] = d
+		}
+
+		return d
+	}
 
 	for eventInfo := range eventChan {
 		event := eventInfo.Event()
@@ -227,7 +245,7 @@ func (jsc *jobScheduler) watchChanges(configRoot string, eventChan <-chan notify
 		}
 
 		if basename == globalEnvFileName {
-			debounced(func() {
+			debouncerFor(globalEnvDebounceKey)(func() {
 				jsc.removeAll()
 				loadedJobs, err := jsc.loadAll(configRoot)
 				if err == nil {
@@ -239,7 +257,7 @@ func (jsc *jobScheduler) watchChanges(configRoot string, eventChan <-chan notify
 		} else if basename == jobConfigFileName {
 			if _, err := os.Stat(eventPath); err == nil {
 				// Debounce updates to handle rapid saves.
-				debounced(handleUpdate)
+				debouncerFor(jobName)(handleUpdate)
 			} else if os.IsNotExist(err) {
 				// If the file doesn't exist by the time debounce runs, treat as removal
 				errRemove := jsc.remove(jobName)
@@ -252,13 +270,13 @@ func (jsc *jobScheduler) watchChanges(configRoot string, eventChan <-chan notify
 				logJobPrintf(jobName, "Error calling os.Stat on file %q before update: %v", eventPath, err)
 			}
 		} else if basename == jobEnvFileName && jsc.exists(jobName) {
-			debounced(handleUpdate)
+			debouncerFor(jobName)(handleUpdate)
 		} else if event == notify.Create {
 			// Handle creation of other files or dirs.
 			// If a directory is created, check if it contains a job config file.
 			if info, err := os.Stat(eventPath); err == nil && info.IsDir() {
 				if _, err := os.Stat(jobConfigPath); err == nil {
-					debounced(handleUpdate)
+					debouncerFor(jobName)(handleUpdate)
 				}
 			}
 		}
