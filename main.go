@@ -110,6 +110,10 @@ func logJobPrintf(job, format string, v ...any) {
 }
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	log.SetFlags(0)
 	log.SetOutput(&logWriter{tee: nil})
 
@@ -146,7 +150,7 @@ func main() {
 	if command == "run" || command == "start" {
 		if err := createDirectories(config); err != nil {
 			fmt.Fprintf(os.Stderr, "%v\n", err)
-			os.Exit(exitError)
+			return exitError
 		}
 	}
 
@@ -154,7 +158,7 @@ func main() {
 		logFile, err := os.OpenFile(cli.Output, os.O_APPEND|os.O_CREATE|os.O_WRONLY, filePerms)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to open app log file: %v\n", err)
-			os.Exit(exitError)
+			return exitError
 		}
 		defer logFile.Close()
 
@@ -164,12 +168,14 @@ func main() {
 	db, err := openAppDB(cli.StateRoot)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to open app database: %v\n", err)
-		os.Exit(exitError)
+		return exitError
 	}
 	defer db.close()
 
-	err = ctx.Run(config)
-	if err != nil {
-		log.Fatal(err)
+	if err := ctx.Run(config); err != nil {
+		log.Print(err)
+		return exitError
 	}
+
+	return exitOK
 }
