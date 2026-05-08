@@ -144,7 +144,10 @@ func main() {
 
 	command := ctx.Command()
 	if command == "run" || command == "start" {
-		createDirectories(config)
+		if err := createDirectories(config); err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			os.Exit(exitError)
+		}
 	}
 
 	if cli.Output != "-" {
