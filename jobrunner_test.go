@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"log"
@@ -127,6 +128,39 @@ func TestJobRunner(t *testing.T) {
 
 		if summary == "" {
 			t.Error("Expected non-empty queue summary")
+		}
+	})
+
+	// Test that Stdout and OnComplete extension points fire.
+	t.Run("ExtensionPoints", func(t *testing.T) {
+		var buf bytes.Buffer
+		var done CompletedJob
+		called := false
+
+		job := JobConfig{
+			Name:    "extension-test-job",
+			Command: []string{"sh", "-c", "printf hi"},
+			Env:     denv.OS(),
+			Stdout:  &buf,
+			OnComplete: func(cj CompletedJob) {
+				called = true
+				done = cj
+			},
+		}
+		runner.addJob(job)
+
+		if err := runner.runQueueHead("extension-test-job"); err != nil {
+			t.Errorf("runQueueHead: %v", err)
+		}
+
+		if got := buf.String(); got != "hi" {
+			t.Errorf("captured stdout = %q, want %q", got, "hi")
+		}
+		if !called {
+			t.Error("OnComplete was not invoked")
+		}
+		if done.ExitStatus != 0 {
+			t.Errorf("OnComplete saw exit %d, want 0", done.ExitStatus)
 		}
 	})
 }

@@ -160,6 +160,14 @@ func (r jobRunner) runQueueHead(queueName string) error {
 			stderrFile = stderrF
 		}
 
+		// Tee output to optional extra writers (e.g., a socket client).
+		if job.Stdout != nil {
+			stdoutFile = teeOptional(stdoutFile, job.Stdout)
+		}
+		if job.Stderr != nil {
+			stderrFile = teeOptional(stderrFile, job.Stderr)
+		}
+
 		jobDir := job.Env[jobDirEnvVar]
 		return runCommand(job.Name, job.Env, jobDir, job.Command, job.Timeout, nil, stdoutFile, stderrFile)
 	}()
@@ -191,6 +199,10 @@ func (r jobRunner) runQueueHead(queueName string) error {
 	})
 	notifyErr := notifyIfNeeded(r.notify, job.Notify, job.Name, cj)
 
+	if job.OnComplete != nil {
+		job.OnComplete(cj)
+	}
+
 	if notifyErr != nil {
 		return newJobError(job.Name, fmt.Errorf("failed to notify about completed job: %w", notifyErr))
 	}
@@ -204,6 +216,16 @@ func (r jobRunner) runQueueHead(queueName string) error {
 	}
 
 	return nil
+}
+
+// teeOptional returns extra alone if base is nil, otherwise an io.MultiWriter
+// of both. Avoids creating a MultiWriter wrapping a nil base, which exec.Cmd
+// would treat as a non-nil writer and fail to send to /dev/null.
+func teeOptional(base, extra io.Writer) io.Writer {
+	if base == nil {
+		return extra
+	}
+	return io.MultiWriter(base, extra)
 }
 
 func (r jobRunner) run() {
