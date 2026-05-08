@@ -70,8 +70,9 @@ func (s *StatusCmd) Run(config Config) error {
 		}
 		seenNames[name] = struct{}{}
 
-		for key, value := range denv.OS() {
-			if osValue, ok := job.Env[key]; ok && value == osValue {
+		osEnv := denv.OS()
+		for _, key := range job.Env.Keys() {
+			if osValue, ok := osEnv[key]; ok && osValue == job.Env[key] {
 				delete(job.Env, key)
 				continue
 			}
