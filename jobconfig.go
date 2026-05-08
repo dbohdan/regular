@@ -23,6 +23,7 @@ type JobConfig struct {
 	Notify    notifyMode     `starlark:"-"`
 	Queue     string         `starlark:"queue"`
 	ShouldRun starlark.Value `starlark:"should_run"`
+	Timeout   time.Duration  `starlark:"timeout"`
 }
 
 func (j JobConfig) QueueName() string {
@@ -198,6 +199,7 @@ func loadJob(env denv.Env, path string) (JobConfig, error) {
 	}
 
 	job.Jitter *= time.Second
+	job.Timeout *= time.Second
 
 	notifyModeString := ""
 	notifyModeValue, exists := globals[notifyModeVar]

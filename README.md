@@ -39,6 +39,9 @@ def should_run(finished, timestamp, dow, **_):
 # Random delay of up to 1 hour.
 jitter = one_hour
 
+# Kill the job if it runs longer than this. 0 (default) means no timeout.
+timeout = one_hour
+
 # Command to run.
 command = [
     "sh",

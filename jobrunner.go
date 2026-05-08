@@ -161,7 +161,7 @@ func (r jobRunner) runQueueHead(queueName string) error {
 		}
 
 		jobDir := job.Env[jobDirEnvVar]
-		return runCommand(job.Name, job.Env, jobDir, job.Command, nil, stdoutFile, stderrFile)
+		return runCommand(job.Name, job.Env, jobDir, job.Command, job.Timeout, nil, stdoutFile, stderrFile)
 	}()
 
 	cj.Error = ""
@@ -252,12 +252,19 @@ func (r jobRunner) summarize() string {
 	return sb.String()
 }
 
-func runCommand(jobName string, env denv.Env, dir string, cmd []string, stdin io.Reader, stdout, stderr io.Writer) error {
+func runCommand(jobName string, env denv.Env, dir string, cmd []string, timeout time.Duration, stdin io.Reader, stdout, stderr io.Writer) error {
 	if len(cmd) == 0 {
 		return fmt.Errorf("empty command")
 	}
 
-	c := exec.CommandContext(context.Background(), cmd[0], cmd[1:]...)
+	ctx := context.Background()
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+
+	c := exec.CommandContext(ctx, cmd[0], cmd[1:]...)
 	c.Dir = dir
 	c.Env = env.Strings()
 	c.Stdin = stdin
