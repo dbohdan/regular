@@ -40,10 +40,12 @@ func (r *RunCmd) Run(config Config) error {
 		}
 	}
 
-	// Run all queued jobs.
+	// Drain each queue sequentially.
 	for queueName := range runner.queues {
-		if err := runner.runQueueHead(queueName); err != nil {
-			return err
+		for len(runner.queues[queueName].jobs) > 0 {
+			if err := runner.runQueueHead(queueName); err != nil {
+				return err
+			}
 		}
 	}
 
