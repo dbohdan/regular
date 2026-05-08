@@ -130,15 +130,13 @@ func (r jobRunner) runQueueHead(queueName string) error {
 	stdoutFilePath := filepath.Join(jobStateDir, stdoutFileName)
 	stderrFilePath := filepath.Join(jobStateDir, stderrFileName)
 
-	var stdoutFile io.Writer
-	var stderrFile io.Writer
+	var stdoutFile, stderrFile io.Writer
 	if job.Log {
 		if err := os.MkdirAll(jobStateDir, dirPerms); err != nil {
 			return newJobError(job.Name, fmt.Errorf("failed to create job state directory: %w", err))
 		}
 
-		var err error
-		stdoutFile, err = os.OpenFile(
+		stdoutF, err := os.OpenFile(
 			stdoutFilePath,
 			os.O_CREATE|os.O_TRUNC|os.O_WRONLY,
 			filePerms,
@@ -146,8 +144,10 @@ func (r jobRunner) runQueueHead(queueName string) error {
 		if err != nil {
 			return newJobError(job.Name, fmt.Errorf("failed to create stdout log file: %w", err))
 		}
+		defer stdoutF.Close()
+		stdoutFile = stdoutF
 
-		stderrFile, err = os.OpenFile(
+		stderrF, err := os.OpenFile(
 			stderrFilePath,
 			os.O_CREATE|os.O_TRUNC|os.O_WRONLY,
 			filePerms,
@@ -155,6 +155,8 @@ func (r jobRunner) runQueueHead(queueName string) error {
 		if err != nil {
 			return newJobError(job.Name, fmt.Errorf("failed to create stderr log file: %w", err))
 		}
+		defer stderrF.Close()
+		stderrFile = stderrF
 	}
 
 	jobDir := job.Env[jobDirEnvVar]
