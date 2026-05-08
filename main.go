@@ -144,7 +144,6 @@ func main() {
 
 	command := ctx.Command()
 	if command == "run" || command == "start" {
-		fmt.Fprintf(os.Stderr, "COMMAND\n")
 		createDirectories(config)
 	}
 
