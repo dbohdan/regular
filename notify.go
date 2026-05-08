@@ -58,44 +58,40 @@ func localUserAddress(username string) string {
 	return username + "@localhost"
 }
 
-func notifyUserByEmail(jobName string, completed CompletedJob) error {
-	db, err := openAppDB(defaultStateRoot)
-	if err != nil {
-		return fmt.Errorf("failed to open database: %v", err)
+func notifyUserByEmail(db *appDB) notifyWhenDone {
+	return func(jobName string, completed CompletedJob) error {
+		subject, text, err := formatMessage(db, jobName, completed)
+		if err != nil {
+			return fmt.Errorf("failed to format notification message: %v", err)
+		}
+
+		currentUser, err := user.Current()
+		if err != nil {
+			return fmt.Errorf("failed to get current user: %v", err)
+		}
+
+		server := mail.NewSMTPClient()
+		server.Host = smtpServer
+		server.Port = smtpPort
+		server.Username = currentUser.Username
+
+		smtpClient, err := server.Connect()
+		if err != nil {
+			return fmt.Errorf("failed to connect to SMTP server: %v\n", err)
+		}
+
+		email := mail.NewMSG()
+		email.SetFrom(localUserAddress(fromUsername)).
+			AddTo(localUserAddress(currentUser.Username)).
+			SetSubject(subject).
+			SetBody(mail.TextPlain, text)
+
+		if err := email.Send(smtpClient); err != nil {
+			return fmt.Errorf("failed to send email: %v\n", err)
+		}
+
+		return nil
 	}
-	defer db.close()
-
-	subject, text, err := formatMessage(db, jobName, completed)
-	if err != nil {
-		return fmt.Errorf("failed to format notification message: %v", err)
-	}
-
-	currentUser, err := user.Current()
-	if err != nil {
-		return fmt.Errorf("failed to get current user: %v", err)
-	}
-
-	server := mail.NewSMTPClient()
-	server.Host = smtpServer
-	server.Port = smtpPort
-	server.Username = currentUser.Username
-
-	smtpClient, err := server.Connect()
-	if err != nil {
-		return fmt.Errorf("failed to connect to SMTP server: %v\n", err)
-	}
-
-	email := mail.NewMSG()
-	email.SetFrom(localUserAddress(fromUsername)).
-		AddTo(localUserAddress(currentUser.Username)).
-		SetSubject(subject).
-		SetBody(mail.TextPlain, text)
-
-	if err := email.Send(smtpClient); err != nil {
-		return fmt.Errorf("failed to send email: %v\n", err)
-	}
-
-	return nil
 }
 
 func formatMessage(db *appDB, jobName string, completed CompletedJob) (string, string, error) {

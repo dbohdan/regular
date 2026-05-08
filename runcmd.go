@@ -13,7 +13,7 @@ func (r *RunCmd) Run(config Config) error {
 	}
 	defer db.close()
 
-	runner, err := newJobRunner(db, notifyUserByEmail, config.StateRoot)
+	runner, err := newJobRunner(db, notifyUserByEmail(db), config.StateRoot)
 	if err != nil {
 		return err
 	}
