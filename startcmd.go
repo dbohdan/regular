@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -59,6 +60,20 @@ func runService(config Config) error {
 	defer db.close()
 	runner, _ := newJobRunner(db, notifyUserByEmail(db), config.StateRoot)
 
+	socketPath, err := defaultSocketPath()
+	if err != nil {
+		return fmt.Errorf("failed to resolve socket path: %w", err)
+	}
+	listener, err := listenSocket(socketPath)
+	if err != nil {
+		return fmt.Errorf("failed to set up socket: %w", err)
+	}
+	defer func() {
+		_ = listener.Close()
+		_ = os.Remove(socketPath)
+	}()
+	log.Print("Listening on " + socketPath)
+
 	go withLog(func() error {
 		return jsc.schedule(runner)
 	})
@@ -66,6 +81,7 @@ func runService(config Config) error {
 		return jsc.watchChanges(config.ConfigRoot, eventChan)
 	})
 	go runner.run()
+	go serveSocket(listener, jsc, runner)
 
 	// Block forever.
 	<-make(chan struct{})
