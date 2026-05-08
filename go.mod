@@ -31,6 +31,8 @@ require (
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/toorop/go-dkim v0.0.0-20201103131630-e1cd1a0a5208 // indirect
+	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
+	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/sys v0.28.0 // indirect
 	golang.org/x/tools v0.22.0 // indirect

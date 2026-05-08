@@ -54,6 +54,10 @@ github.com/syncthing/notify v0.0.0-20250207082249-f0fa8f99c2bc h1:xc3UfSFlH/X5hR
 github.com/syncthing/notify v0.0.0-20250207082249-f0fa8f99c2bc/go.mod h1:J0q59IWjLtpRIJulohwqEZvjzwOfTEPp8SVhDJl+y0Y=
 github.com/toorop/go-dkim v0.0.0-20201103131630-e1cd1a0a5208 h1:PM5hJF7HVfNWmCjMdEfbuOBNXSVF2cMFGgQTPdKCbwM=
 github.com/toorop/go-dkim v0.0.0-20201103131630-e1cd1a0a5208/go.mod h1:BzWtXXrXzZUvMacR0oF/fbDDgUPO8L36tDMmRAf14ns=
+github.com/vmihailenco/msgpack/v5 v5.4.1 h1:cQriyiUvjTwOHg8QZaPihLWeRAAVoCpE00IUPn0Bjt8=
+github.com/vmihailenco/msgpack/v5 v5.4.1/go.mod h1:GaZTsDaehaPpQVyxrf5mtQlH+pc21PIudVV/E3rRQok=
+github.com/vmihailenco/tagparser/v2 v2.0.0 h1:y09buUbR+b5aycVFQs/g70pqKVZNBmxwAhO7/IwNM9g=
+github.com/vmihailenco/tagparser/v2 v2.0.0/go.mod h1:Wri+At7QHww0WTrCBeu4J6bNtoV6mEfg5OIWRZA9qds=
 github.com/xhit/go-simple-mail/v2 v2.16.0 h1:ouGy/Ww4kuaqu2E2UrDw7SvLaziWTB60ICLkIkNVccA=
 github.com/xhit/go-simple-mail/v2 v2.16.0/go.mod h1:b7P5ygho6SYE+VIqpxA6QkYfv4teeyG4MKqB3utRu98=
 go.starlark.net v0.0.0-20241226192728-8dfa5b98479f h1:Zs/py28HDFATSDzPcfIzrBFjVsV7HzDEGNNVZIGsjm0=
