@@ -130,38 +130,40 @@ func (r jobRunner) runQueueHead(queueName string) error {
 	stdoutFilePath := filepath.Join(jobStateDir, stdoutFileName)
 	stderrFilePath := filepath.Join(jobStateDir, stderrFileName)
 
-	var stdoutFile, stderrFile io.Writer
-	if job.Log {
-		if err := os.MkdirAll(jobStateDir, dirPerms); err != nil {
-			return newJobError(job.Name, fmt.Errorf("failed to create job state directory: %w", err))
+	runErr := func() error {
+		var stdoutFile, stderrFile io.Writer
+		if job.Log {
+			if err := os.MkdirAll(jobStateDir, dirPerms); err != nil {
+				return fmt.Errorf("failed to create job state directory: %w", err)
+			}
+
+			stdoutF, err := os.OpenFile(
+				stdoutFilePath,
+				os.O_CREATE|os.O_TRUNC|os.O_WRONLY,
+				filePerms,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to create stdout log file: %w", err)
+			}
+			defer stdoutF.Close()
+			stdoutFile = stdoutF
+
+			stderrF, err := os.OpenFile(
+				stderrFilePath,
+				os.O_CREATE|os.O_TRUNC|os.O_WRONLY,
+				filePerms,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to create stderr log file: %w", err)
+			}
+			defer stderrF.Close()
+			stderrFile = stderrF
 		}
 
-		stdoutF, err := os.OpenFile(
-			stdoutFilePath,
-			os.O_CREATE|os.O_TRUNC|os.O_WRONLY,
-			filePerms,
-		)
-		if err != nil {
-			return newJobError(job.Name, fmt.Errorf("failed to create stdout log file: %w", err))
-		}
-		defer stdoutF.Close()
-		stdoutFile = stdoutF
+		jobDir := job.Env[jobDirEnvVar]
+		return runCommand(job.Name, job.Env, jobDir, job.Command, nil, stdoutFile, stderrFile)
+	}()
 
-		stderrF, err := os.OpenFile(
-			stderrFilePath,
-			os.O_CREATE|os.O_TRUNC|os.O_WRONLY,
-			filePerms,
-		)
-		if err != nil {
-			return newJobError(job.Name, fmt.Errorf("failed to create stderr log file: %w", err))
-		}
-		defer stderrF.Close()
-		stderrFile = stderrF
-	}
-
-	jobDir := job.Env[jobDirEnvVar]
-
-	runErr := runCommand(job.Name, job.Env, jobDir, job.Command, nil, stdoutFile, stderrFile)
 	cj.Error = ""
 	if runErr != nil {
 		cj.Error = runErr.Error()
