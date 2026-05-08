@@ -39,7 +39,8 @@ def should_run(finished, timestamp, dow, **_):
 # Random delay of up to 1 hour.
 jitter = one_hour
 
-# Kill the job if it runs longer than this. 0 (default) means no timeout.
+# Kill the job if it runs longer than this.
+# 0 (default) means no timeout.
 timeout = one_hour
 
 # Command to run.
@@ -92,6 +93,13 @@ Run specific jobs once:
 
 - **regular run** [**--force**] [_job-names_...]
 
+> [!NOTE]
+> When a `regular start` daemon is running, `run` connects to it over a Unix socket and streams the job's stdout, stderr, and exit code back to your terminal.
+> Ad hoc runs use the same queues and avoid duplication just like scheduled runs.
+>
+> With no daemon running, `run` falls back to executing the job in its own process.
+> Concurrent standalone invocations avoid conflict using a lock file in the state directory.
+
 Check job status:
 
 - **regular status** [**-l** _lines_] [_job-names_...]
@@ -119,8 +127,13 @@ Default paths (override with **-c** and **-s**):
   - Database: `~/.local/state/regular/state.sqlite3`
   - Lock file: `~/.local/state/regular/app.lock`.
     When in use, this file prevents multiple instances of `regular start` from running at the same time.
+    `regular run` also takes this lock when no daemon is running.
   - Logs for the latest job: `~/.local/state/regular/<job>/{stdout,stderr}.log`.
     These logs and earlier logs are also stored in the database.
+
+- Daemon socket: `$XDG_RUNTIME_DIR/regular/socket` (or, with no runtime dir, a per-user subdir under `$TMPDIR`).
+  Set `REGULAR_SOCK` to override.
+  The socket is created with mode `0600` and the client refuses to connect to one owned by another user.
 
 The config and state directory are created automatically when you run `regular start` or `regular run`.
 

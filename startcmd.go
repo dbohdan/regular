@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/gofrs/flock"
 	"github.com/syncthing/notify"
@@ -83,7 +85,10 @@ func runService(config Config) error {
 	go runner.run()
 	go serveSocket(listener, jsc, runner)
 
-	// Block forever.
-	<-make(chan struct{})
+	// Wait for SIGINT/SIGTERM; the deferred cleanups remove the socket.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	sig := <-sigCh
+	log.Printf("Received %v; shutting down", sig)
 	return nil
 }
