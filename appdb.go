@@ -130,6 +130,9 @@ func (c *appDB) saveLogFile(tx *sql.Tx, jobID int64, logName, path string) error
 
 	lineNum := 1
 	scanner := bufio.NewScanner(bytes.NewReader(buf))
+	// Allow a single line to be as long as the entire log buffer; otherwise
+	// the default 64 KiB cap would fail the whole transaction on long lines.
+	scanner.Buffer(make([]byte, 0, 64*1024), maxLogBufferSize)
 	for scanner.Scan() {
 		_, err = tx.Exec(`
 			INSERT INTO job_logs (
