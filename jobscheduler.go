@@ -19,7 +19,7 @@ import (
 type jobScheduler struct {
 	byName map[string]JobConfig
 
-	mu *sync.RWMutex
+	mu sync.RWMutex
 }
 
 type updateJobsResult int
@@ -30,15 +30,13 @@ const (
 	jobsUpdated
 )
 
-func newJobScheduler() jobScheduler {
-	return jobScheduler{
+func newJobScheduler() *jobScheduler {
+	return &jobScheduler{
 		byName: make(map[string]JobConfig),
-
-		mu: &sync.RWMutex{},
 	}
 }
 
-func (jsc jobScheduler) addDueJobsToQueue(runner jobRunner, t time.Time) error {
+func (jsc *jobScheduler) addDueJobsToQueue(runner jobRunner, t time.Time) error {
 	jsc.mu.RLock()
 	defer jsc.mu.RUnlock()
 
@@ -52,7 +50,7 @@ func (jsc jobScheduler) addDueJobsToQueue(runner jobRunner, t time.Time) error {
 	return nil
 }
 
-func (jsc jobScheduler) exists(name string) bool {
+func (jsc *jobScheduler) exists(name string) bool {
 	jsc.mu.RLock()
 	_, exists := jsc.byName[name]
 	jsc.mu.RUnlock()
@@ -60,7 +58,7 @@ func (jsc jobScheduler) exists(name string) bool {
 	return exists
 }
 
-func (jsc jobScheduler) loadAll(configRoot string) ([]string, error) {
+func (jsc *jobScheduler) loadAll(configRoot string) ([]string, error) {
 	loadedJobs := []string{}
 	err := filepath.Walk(configRoot, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -83,7 +81,7 @@ func (jsc jobScheduler) loadAll(configRoot string) ([]string, error) {
 	return loadedJobs, err
 }
 
-func (jsc jobScheduler) schedule(runner jobRunner) error {
+func (jsc *jobScheduler) schedule(runner jobRunner) error {
 	ticker := time.NewTicker(scheduleInterval)
 	defer ticker.Stop()
 
@@ -121,7 +119,7 @@ func (jsc jobScheduler) schedule(runner jobRunner) error {
 	return nil
 }
 
-func (jsc jobScheduler) update(configRoot, jobPath string) (updateJobsResult, *JobConfig, error) {
+func (jsc *jobScheduler) update(configRoot, jobPath string) (updateJobsResult, *JobConfig, error) {
 	jobDir := jobDir(jobPath)
 	jobName := jobNameFromPath(jobPath)
 
@@ -163,7 +161,7 @@ func (jsc jobScheduler) update(configRoot, jobPath string) (updateJobsResult, *J
 	return jobsAddedNew, &job, nil
 }
 
-func (jsc jobScheduler) remove(name string) error {
+func (jsc *jobScheduler) remove(name string) error {
 	jsc.mu.Lock()
 	defer jsc.mu.Unlock()
 
@@ -183,7 +181,7 @@ func (jsc *jobScheduler) removeAll() {
 	jsc.byName = make(map[string]JobConfig)
 }
 
-func (jsc jobScheduler) watchChanges(configRoot string, eventChan <-chan notify.EventInfo) error {
+func (jsc *jobScheduler) watchChanges(configRoot string, eventChan <-chan notify.EventInfo) error {
 	debounced := debounce.New(debounceInterval)
 
 	for eventInfo := range eventChan {

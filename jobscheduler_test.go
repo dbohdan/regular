@@ -11,10 +11,6 @@ func TestNewJobScheduler(t *testing.T) {
 	if jsc.byName == nil {
 		t.Error(`"byName" map should be initialized`)
 	}
-
-	if jsc.mu == nil {
-		t.Error("mutex should be initialized")
-	}
 }
 
 func TestJobSchedulerUpdate(t *testing.T) {
